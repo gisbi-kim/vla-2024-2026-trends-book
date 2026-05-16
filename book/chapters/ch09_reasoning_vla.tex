@@ -1,0 +1,303 @@
+\chapter{Reasoning VLA: 로봇은 생각해야 하는가}
+\label{ch:reasoning_vla}
+
+8장에서는 VLA 성능이 benchmark tuple 위에서 정의된다고 했다. 그런데 benchmark success rate가 높아도 아직 설명되지 않는 문제가 있다. 로봇이 복잡한 지시를 어떻게 분해하는가, 관측이 불충분할 때 어떻게 멈추는가, 실패했을 때 무엇을 고쳐야 하는가, 다른 사람이 볼 수 있는 언어로 자신의 상태를 설명할 수 있는가. 이 장에서 말하는 reasoning은 추상적인 철학 용어가 아니라, 행동 선택 전에 필요한 명시적 중간 계산이다.
+
+\section{Reasoning의 공학적 정의}
+
+VLA에서 reasoning은 action을 바로 출력하기 전에 latent 또는 explicit variable을 계산하는 과정으로 볼 수 있다.
+
+\begin{equation}
+  \pi_\theta(a_t \mid o_t,q,h_t)
+  =
+  \sum_{z_t}
+  \pi_\theta(a_t \mid o_t,q,h_t,z_t)
+  p_\theta(z_t \mid o_t,q,h_t).
+\end{equation}
+
+$z_t$는 subgoal, object relation, affordance, constraint, plan, uncertainty state, failure diagnosis일 수 있다. 즉 reasoning은 모델이 ``무엇을 해야 하는가''와 ``어떻게 움직일 것인가''를 구분하도록 돕는 중간 표현이다.
+
+이 정의가 중요한 이유는 reasoning을 단순히 chain-of-thought 문장 생성으로 축소하지 않기 위해서이다. 로봇에서 reasoning은 자연어 설명일 수도 있지만, waypoint graph, symbolic plan, constraint set, belief state, value estimate일 수도 있다. 핵심은 그 중간 계산이 실제 행동 품질을 개선해야 한다는 점이다.
+
+\section{언제 reasoning이 필요한가}
+
+모든 VLA task에 긴 reasoning이 필요한 것은 아니다. 눈앞에 있는 블록을 집어 지정된 상자에 넣는 짧은 과제에서는 direct policy가 충분할 수 있다. Reasoning이 필요해지는 상황은 대체로 다음 네 가지이다.
+
+\begin{enumerate}
+  \item 지시가 여러 subgoal을 포함한다.
+  \item 관측이 부분적이어서 보이지 않는 상태를 추론해야 한다.
+  \item 행동 전에 safety 또는 task constraint를 검사해야 한다.
+  \item 실패 후 원인을 진단하고 다른 전략을 선택해야 한다.
+\end{enumerate}
+
+이를 decision problem으로 쓰면 다음과 같다.
+
+\begin{equation}
+  a_t^\star
+  =
+  \arg\max_{a_t}
+  \mathbb{E}
+  \left[
+    R(s_{t:t+H},q)
+    -
+    \lambda C(s_{t:t+H},a_{t:t+H})
+    \mid
+    b_t
+  \right],
+\end{equation}
+
+$b_t$는 belief state이고, $C$는 collision, force violation, rule violation 같은 cost이다. Reasoning은 $b_t$, $R$, $C$, 가능한 subgoal을 더 잘 추정하기 위한 과정이다. 로봇은 단순히 다음 token을 맞히는 것이 아니라, 불확실한 상태에서 비용이 큰 실패를 피해야 한다.
+
+\section{Task decomposition}
+
+긴 자연어 지시는 바로 motor action으로 내려가기 어렵다. 일반적인 구조는 지시를 subtask sequence로 바꾸는 것이다.
+
+\begin{equation}
+  q
+  \xrightarrow{\mathrm{decompose}}
+  (g_1,\ldots,g_K)
+  \xrightarrow{\mathrm{policy}}
+  (a_1,\ldots,a_T).
+\end{equation}
+
+예를 들어 ``서랍을 열고 안에 있는 스펀지를 싱크대 옆에 놓아라''는 서랍 위치 찾기, 손잡이 잡기, 당기기, 내부 물체 탐색, 스펀지 grasp, 목표 위치 배치로 나뉜다. 여기서 subgoal sequence가 틀리면 low-level policy가 아무리 좋아도 실패한다.
+
+Task decomposition의 위험은 language prior가 물리 상태를 무시할 수 있다는 점이다. LLM은 그럴듯한 순서를 만들 수 있지만, 현재 서랍이 잠겨 있는지, 손잡이가 보이는지, 로봇팔이 닿는지 모를 수 있다. 따라서 VLA의 decomposition은 관측 기반이어야 한다.
+
+\begin{equation}
+  p(g_{1:K} \mid q)
+  \quad \text{보다} \quad
+  p(g_{1:K} \mid q,o_t,h_t)
+  \quad \text{가 필요하다.}
+\end{equation}
+
+좋은 reasoning VLA는 plan을 한 번 만들고 끝내지 않는다. 실행 중 관측이 바뀌면 subgoal을 수정한다.
+
+\section{Symbolic plan과 neural policy}
+
+Reasoning을 구현하는 한 방법은 symbolic planner와 neural policy를 결합하는 것이다.
+
+\begin{equation}
+  q,o_t
+  \rightarrow
+  \mathcal{P}
+  =
+  \left(
+    \mathcal{S},
+    \mathcal{G},
+    \mathcal{U},
+    c
+  \right)
+  \rightarrow
+  \pi_\theta(a_t \mid o_t,g_k).
+\end{equation}
+
+$\mathcal{S}$는 symbolic state, $\mathcal{G}$는 goal predicates, $\mathcal{U}$는 operators, $c$는 constraint이다. Planner는 ``컵이 비어 있어야 집을 수 있다'', ``문을 열기 전에 손잡이를 잡아야 한다'' 같은 구조를 표현할 수 있다. Neural policy는 각 operator를 실제 행동으로 실행한다.
+
+이 접근의 장점은 해석 가능성과 검증 가능성이다. 단점은 symbolic state를 정확히 추출하기 어렵고, 조작 세계의 연속적 접촉을 discrete predicate로 단순화해야 한다는 것이다. 그래서 2024--2026년 reasoning VLA는 완전한 symbolic planning보다, language plan, visual grounding, learned skill policy를 섞는 hybrid 구조가 많다.
+
+\section{Belief와 uncertainty}
+
+로봇은 모든 상태를 볼 수 없다. 물체가 가려질 수 있고, grasp가 성공했는지 카메라로 확실히 보이지 않을 수 있고, drawer 안의 물체는 열기 전까지 모른다. 따라서 VLA는 state $s_t$가 아니라 belief $b_t$ 위에서 행동해야 한다.
+
+\begin{equation}
+  b_t(s)
+  =
+  p(s_t=s \mid o_{1:t},a_{1:t-1},q).
+\end{equation}
+
+Belief update는 Bayes filter 형태로 쓸 수 있다.
+
+\begin{equation}
+  b_t(s')
+  \propto
+  p(o_t \mid s')
+  \int
+  p(s' \mid s,a_{t-1})
+  b_{t-1}(s)
+  ds.
+\end{equation}
+
+대부분의 VLA는 이 식을 명시적으로 풀지 않는다. 대신 transformer hidden state, recurrent memory, visual history, retrieved context가 belief 역할을 한다. 하지만 논문을 읽을 때는 같은 질문을 해야 한다. 모델이 무엇을 모른다고 표현할 수 있는가. 불확실할 때 더 관측하려는 행동을 선택하는가. 성공 여부를 확인한 뒤 다음 단계로 넘어가는가.
+
+Uncertainty는 score로 나타낼 수 있다.
+
+\begin{equation}
+  U_t
+  =
+  H\left[p_\theta(a_t \mid o_t,q,h_t)\right]
+  +
+  \beta
+  H\left[p_\theta(g_t \mid o_t,q,h_t)\right].
+\end{equation}
+
+이 값이 높을 때 로봇은 바로 행동하기보다 재관측, 질문, 느린 제어, human confirmation을 선택할 수 있다. Reasoning VLA의 중요한 특징은 답을 만드는 능력보다 모를 때 멈추는 능력이다.
+
+\section{Self-check와 verifier}
+
+LLM 기반 agent에서는 self-check 또는 verifier가 자주 사용된다. VLA에서도 유사한 구조를 쓸 수 있다.
+
+\begin{equation}
+  \hat{a}_{t:t+H}
+  =
+  \pi_\theta(o_t,q),
+  \qquad
+  v_\phi
+  \left(
+    o_t,q,\hat{a}_{t:t+H}
+  \right)
+  \rightarrow
+  \left[
+    \mathrm{valid},
+    \mathrm{risk},
+    \mathrm{reason}
+  \right].
+\end{equation}
+
+Verifier는 action이 목표와 맞는지, collision 가능성이 있는지, unsafe instruction인지, missing precondition이 있는지 확인한다. 예를 들어 ``뜨거운 팬을 맨손으로 집어라'' 같은 지시는 거부하거나 도구 사용을 제안해야 한다.
+
+다만 verifier가 language-only이면 충분하지 않다. 물리적 위험은 geometry와 force에 의존한다. 따라서 VLA verifier는 가능하면 scene geometry, robot reachability, predicted trajectory, contact risk를 함께 봐야 한다. Verifier는 행동 전 safety layer가 될 수 있지만, latency를 늘릴 수 있으므로 6장의 efficient VLA 논의와도 연결된다.
+
+\section{Failure diagnosis와 recovery}
+
+Robot reasoning의 가장 실용적인 용도는 실패 복구이다. 실패한 후 같은 action을 반복하면 안 된다. 실패 원인을 분류하고 다음 전략을 바꿔야 한다.
+
+\begin{equation}
+  d_t
+  =
+  f_\psi
+  \left(
+    o_{1:t},
+    a_{1:t},
+    q
+  \right)
+  \in
+  \{
+    \mathrm{wrong\ object},
+    \mathrm{bad\ grasp},
+    \mathrm{collision},
+    \mathrm{lost\ object},
+    \mathrm{unreachable}
+  \}.
+\end{equation}
+
+복구 policy는 diagnosis에 조건부로 달라진다.
+
+\begin{equation}
+  a_t
+  \sim
+  \pi_\theta(a_t \mid o_t,q,h_t,d_t).
+\end{equation}
+
+예를 들어 bad grasp라면 gripper를 열고 접근 pose를 바꾼다. Lost object라면 camera를 움직이거나 scene을 재탐색한다. Unreachable이면 base를 이동하거나 사용자에게 목표 위치 변경을 요청한다. 이처럼 recovery는 reasoning, perception, control이 모두 필요한 영역이다.
+
+\section{Language as interface}
+
+VLA에서 언어는 input instruction일 뿐 아니라 interface가 될 수 있다. 로봇은 자신의 plan, uncertainty, failure reason을 사람에게 설명할 수 있다.
+
+\begin{equation}
+  e_t
+  =
+  g_\eta(o_t,h_t,q,z_t,d_t),
+\end{equation}
+
+$e_t$는 자연어 explanation이다. 설명은 사용자가 로봇을 신뢰하게 만드는 장식이 아니다. HRI 관점에서는 사용자가 로봇의 한계를 이해하고, 지시를 수정하고, 안전한 협업을 할 수 있게 하는 제어 channel이다.
+
+하지만 설명은 행동과 일치해야 한다. 로봇이 실제로는 scene을 확인하지 않았는데 ``확인했다''고 말하면 위험하다. 따라서 explanation은 internal state와 action log에 grounded되어야 한다. Reasoning VLA 논문은 natural language explanation의 fluency보다, 설명이 실제 perception과 policy decision에 근거하는지를 보여야 한다.
+
+\section{Chain-of-thought 공개의 문제}
+
+LLM에서는 chain-of-thought를 출력하면 성능이 좋아 보일 수 있다. 그러나 로봇에서는 모든 reasoning trace를 공개하는 것이 항상 옳지 않다. 첫째, 긴 reasoning은 latency를 증가시킨다. 둘째, 생성된 문장이 실제 policy decision과 다를 수 있다. 셋째, 안전 관련 reasoning은 사용자가 악용할 수 있는 정보를 포함할 수 있다.
+
+따라서 VLA에서는 internal reasoning과 external explanation을 구분하는 것이 좋다.
+
+\begin{equation}
+  z_t^{\mathrm{internal}}
+  \ne
+  e_t^{\mathrm{external}}.
+\end{equation}
+
+Internal reasoning은 action selection과 safety check를 위한 계산이고, external explanation은 사용자에게 필요한 수준으로 요약된 정보이다. 수업에서 이 차이를 강조해야 한다. Reasoning이 좋다는 말은 긴 문장을 많이 출력한다는 뜻이 아니라, 행동에 필요한 중간 상태를 정확히 계산한다는 뜻이다.
+
+\section{Reasoning VLA 평가}
+
+Reasoning 능력은 success rate만으로 평가하기 어렵다. 다음과 같은 평가가 필요하다.
+
+\begin{table}[t]
+  \centering
+  \caption{Reasoning VLA 평가 항목}
+  \label{tab:reasoning_vla_eval}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{34mm}X}
+    \toprule
+    항목 & 확인할 내용 \\
+    \midrule
+    Decomposition accuracy & 지시를 올바른 subgoal sequence로 분해하는가 \\
+    Grounded plan validity & plan이 현재 관측과 robot reachability에 맞는가 \\
+    Replanning success & 실패 또는 관측 변화 후 plan을 수정하는가 \\
+    Uncertainty behavior & 불확실할 때 멈춤, 재관측, 질문을 선택하는가 \\
+    Constraint satisfaction & safety, collision, force, workspace constraint를 지키는가 \\
+    Explanation faithfulness & 설명이 실제 관측, plan, action log와 일치하는가 \\
+    Latency overhead & reasoning module이 control loop를 망치지 않는가 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Reasoning benchmark는 adversarial instruction과 partial observability를 포함해야 한다. 예를 들어 보이지 않는 물체를 요구하거나, 모순된 지시를 주거나, 안전하지 않은 행동을 요청하거나, 중간에 물체 위치를 바꾸는 상황이 필요하다. 단순한 household command completion만으로는 reasoning과 memorized prior를 구분하기 어렵다.
+
+\begin{casebox}{Review box: Text plan vs grounded plan vs recovery policy}
+Reasoning VLA 논문은 plan text를 생성했다는 사실만으로는 충분하지 않다. 다음 세 수준을 분리해야 논문 주장이 action-level evidence로 닫힌다.
+
+\vspace{0.5em}
+\begin{tabularx}{\linewidth}{>{\bfseries}p{31mm}X}
+  \toprule
+  수준 & 리뷰할 질문 \\
+  \midrule
+  Text plan & 생성된 plan이 언어적으로 그럴듯한가를 넘어서, 현재 관측과 robot reachability를 실제로 반영하는가? \\
+  Grounded plan & Subgoal, object relation, precondition, constraint가 visual scene과 controller interface에 연결되어 있는가? \\
+  Recovery policy & 실패를 감지한 뒤 같은 action을 반복하지 않고, diagnosis에 따라 재관측, 재접근, handoff, safe stop으로 전환하는가? \\
+  최소 baseline & No-plan direct policy, text-only plan, grounded plan without recovery를 분리해 비교했는가? \\
+  핵심 metric & Plan accuracy보다 recovery success, unsafe action reduction, intervention reduction, latency overhead를 보고했는가? \\
+  \bottomrule
+\end{tabularx}
+\end{casebox}
+
+\section{요약}
+
+Reasoning VLA는 로봇이 긴 문장을 생성하는 문제가 아니라, 행동 전에 필요한 중간 상태를 계산하고 검증하는 문제이다. Task decomposition, belief update, uncertainty, verifier, failure diagnosis, recovery, explanation은 모두 reasoning의 구체적 형태이다. 좋은 reasoning은 성공률을 높이는 것뿐 아니라, 실패를 더 잘 감지하고, 위험한 행동을 피하고, 사람과 더 정확히 상호작용하게 만든다.
+
+다음 장에서는 reasoning의 한 단계 앞에 있는 문제를 다룬다. 로봇이 행동하기 전에 세계가 어떻게 변할지 예측할 수 있다면, plan과 safety check는 더 강해진다. 이것이 world model과 simulation이 VLA에서 중요한 이유이다.
+
+\begin{casebox}{Case study: VLA-OS와 MemoryVLA}
+VLA-OS류 논문은 VLA가 end-to-end action generator로 충분한지, 또는 planning representation을 명시적으로 구조화해야 하는지 묻는다. 이때 핵심 평가는 plan text의 자연스러움이 아니라 planning representation이 success, recovery, failure diagnosis를 얼마나 개선하는가이다. MemoryVLA류 논문은 장기 이력과 과거 실패를 action decision에 넣는 방향으로 볼 수 있으며, reasoning을 ``설명 생성''이 아니라 state/history variable 관리 문제로 읽게 만든다.
+\end{casebox}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{Claim-source-evidence-caution map for reasoning VLA}
+  \label{tab:ch9_claim_source}
+  \begin{tabularx}{\textwidth}{L{31mm}L{30mm}L{46mm}Y}
+    \toprule
+    Claim & Source & Evidence & Caution \\
+    \midrule
+    Language planning needs affordance grounding & SayCan \citep{saycan} & LLM plan combined with affordance scoring in robot tasks & Pre-VLA predecessor; do not classify as end-to-end VLA. \\
+    Planning representation should be tested, not assumed & VLA-OS \citep{vlaos} & Comparison of planning representations/paradigms & Check whether the comparison controls backbone and task protocol. \\
+    Memory/reasoning must improve action-level outcomes & MemoryVLA 계열, Gemini Robotics-ER \citep{geminiroboticser} & Long-horizon memory or embodied reasoning claims & Closed/company or preprint evidence must be separated from reproducible benchmarks. \\
+    Explanation is not reasoning unless grounded in action logs & Reasoning VLA papers & Explanation faithfulness and recovery behavior & Fluent text can be post-hoc and unrelated to policy decisions. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{sourcebox}{Key papers}
+\begin{itemize}
+  \item Ahn et al. (2022), SayCan: LLM plan과 affordance grounding의 선행 구조를 보여 준다.
+  \item VLA-OS (2025), arXiv preprint: planning representation/paradigm을 VLA 내부 구조로 비교하는 case study이다.
+  \item WorldVLA (2025), preprint/project report: action과 image understanding/generation을 결합해 reasoning과 world model의 경계를 흐린다.
+  \item Google DeepMind Gemini Robotics-ER (2025/2026), company report/page: closed industrial embodied reasoning model의 사례로 읽는다.
+  \item MemoryVLA 계열 논문: history, memory, failure recovery가 reasoning claim을 어떻게 바꾸는지 확인할 수 있다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Advanced]}
+Reasoning VLA 논문 하나를 골라 reasoning output이 subgoal, relation, constraint, uncertainty, recovery 중 무엇인지 표시하고, 그 변수가 closed-loop success로 검증되었는지 판단하라.
+\end{assignmentbox}

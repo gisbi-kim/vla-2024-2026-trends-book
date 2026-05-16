@@ -1,0 +1,272 @@
+\chapter{Fine-Tuning과 Post-Training: VLA를 과제에 맞추는 방법}
+
+\section{장의 목표}
+
+4장에서는 VLA가 무엇을 출력해야 하는지, 즉 행동 표현을 다루었다. 5장은 그 출력이 실제 과제에서 잘 작동하도록 모델을 어떻게 맞추는지 다룬다. VLA의 성능은 pretrained backbone만으로 결정되지 않는다. 같은 backbone이라도 어떤 데이터로 fine-tuning했는지, action head를 어떻게 초기화했는지, adapter를 어디에 넣었는지, post-training feedback을 어떻게 주었는지에 따라 success rate와 latency가 크게 달라진다.
+
+이 장에서는 VLA 학습 과정을 다섯 단계로 구분한다.
+
+\begin{enumerate}
+  \item pretraining: 일반 시각-언어 또는 로봇 prior를 얻는 단계
+  \item robot adaptation: action space와 embodiment에 맞추는 단계
+  \item supervised fine-tuning: demonstration을 이용해 task policy를 맞추는 단계
+  \item parameter-efficient tuning: adapter, LoRA류 모듈만 학습하는 단계
+  \item post-training: reward, verification, interaction, simulator feedback으로 실행 품질을 보정하는 단계
+\end{enumerate}
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[node distance=6mm]
+    \node[vlablock] (pre) {VLM/VLA\\pretraining};
+    \node[vlablock, right=of pre] (adapt) {Robot adaptation\\data mixture};
+    \node[vlablock, right=of adapt] (sft) {SFT\\task data};
+    \node[vlablock, right=of sft] (post) {Post-training\\verifier/feedback};
+    \node[vlablock, right=of post] (deploy) {Deployment\\calibration};
+    \draw[vlaarrow] (pre) -- (adapt);
+    \draw[vlaarrow] (adapt) -- (sft);
+    \draw[vlaarrow] (sft) -- (post);
+    \draw[vlaarrow] (post) -- (deploy);
+  \end{tikzpicture}
+  \caption{Author-created schematic. VLA fine-tuning pipeline. 공개용 원고에서는 pretraining, robot adaptation, supervised fine-tuning, post-training, deployment calibration을 명확히 구분한다.}
+  \label{fig:finetuning_pipeline}
+\end{figure}
+
+\section{Pretraining과 robot adaptation}
+
+Pretraining은 VLA가 세상의 객체, 언어 표현, 장면 구조, 일부 행동 prior를 배우는 단계이다. VLM 기반 VLA에서는 대규모 image-text data가 semantic prior를 제공한다. Robot foundation model 계열에서는 여러 로봇 trajectory를 함께 학습해 행동 prior를 얻는다.
+
+그러나 pretraining만으로는 특정 로봇의 action space를 바로 맞추기 어렵다. 로봇 $r$의 action space를 $\mathcal{A}^{(r)}$라고 하면, pretrained model이 사용하는 latent representation $z_t$를 실제 행동으로 바꾸는 decoder가 필요하다.
+
+\begin{equation}
+  \act_t^{(r)}
+  =
+  D_{\phi}^{(r)}(z_t).
+\end{equation}
+
+Robot adaptation은 $D_{\phi}^{(r)}$를 특정 embodiment에 맞추는 단계이다. 이 단계가 약하면 backbone은 장면을 잘 이해하지만 행동이 robot controller와 맞지 않는다. OpenVLA류 모델을 실제 과제에 fine-tuning할 때 action head와 normalization, controller interface가 중요한 이유가 여기에 있다.
+
+\section{Supervised fine-tuning}
+
+가장 기본적인 fine-tuning은 demonstration dataset을 이용한 supervised learning이다.
+
+\begin{equation}
+  \mathcal{D}_{\mathrm{task}}
+  =
+  \{(\obs_{1:T_i}^{(i)}, \lang^{(i)}, \act_{1:T_i}^{(i)})\}_{i=1}^{N}.
+\end{equation}
+
+continuous action이면 다음 loss를 쓴다.
+
+\begin{equation}
+  \mathcal{L}_{\mathrm{SFT}}
+  =
+  \sum_{i,t}
+  \left\|
+  \act_t^{(i)}
+  -
+  \pi_\theta(\hist_t^{(i)},\lang^{(i)})
+  \right\|_2^2.
+\end{equation}
+
+action token이면 cross entropy가 된다.
+
+\begin{equation}
+  \mathcal{L}_{\mathrm{SFT-token}}
+  =
+  -
+  \sum_{i,t}
+  \log
+  p_\theta(u_t^{(i)} \mid \hist_t^{(i)},\lang^{(i)}).
+\end{equation}
+
+이 단계의 핵심은 data split이다. train task와 test task가 너무 비슷하면 fine-tuning 성능은 높아 보이지만 일반화 주장은 약해진다. 따라서 VLA fine-tuning 논문은 seen task, unseen object, unseen scene, unseen instruction을 분리해야 한다.
+
+\section{Full fine-tuning과 frozen backbone}
+
+Full fine-tuning은 backbone까지 모두 업데이트한다. 장점은 task adaptation 능력이 크다는 점이다. 약점은 계산 비용과 catastrophic forgetting이다. VLM backbone이 가진 넓은 semantic prior가 작은 robot dataset에 과적합될 수 있다.
+
+Frozen backbone 방식은 pretrained encoder 또는 language model을 고정하고 action head만 학습한다.
+
+\begin{equation}
+  \theta =
+  (\theta_{\mathrm{frozen}}, \phi_{\mathrm{head}}),
+  \qquad
+  \nabla_{\theta_{\mathrm{frozen}}}\mathcal{L}=0.
+\end{equation}
+
+이 방식은 안정적이고 비용이 낮지만, pretrained representation이 robot action에 충분히 맞지 않으면 성능이 제한된다. 실제 연구에서는 full fine-tuning과 frozen backbone 사이에 adapter, LoRA, partial fine-tuning이 위치한다.
+
+\begin{table}[t]
+  \centering
+  \caption{VLA fine-tuning 방식의 비교}
+  \label{tab:finetuning_types}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{30mm}XXX}
+    \toprule
+    방식 & 장점 & 약점 & 확인할 실험 \\
+    \midrule
+    Full fine-tuning & task adaptation 강함 & 비용과 forgetting 위험 & data size ablation \\
+    Frozen backbone & 안정적이고 저비용 & action mismatch 가능 & head-only baseline \\
+    Adapter tuning & 비용과 적응력 균형 & adapter 위치에 민감 & adapter placement ablation \\
+    LoRA류 tuning & parameter-efficient & rank 선택에 민감 & rank/latency/성능 비교 \\
+    Post-training & 실행 품질 보정 가능 & reward나 verifier bias 가능 & real rollout 검증 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Adapter와 LoRA류 접근}
+
+Adapter 기반 VLA는 큰 backbone을 대부분 고정하고 작은 학습 가능 모듈을 삽입한다. 이를 단순화하면 한 transformer layer에서 다음과 같이 쓸 수 있다.
+
+\begin{equation}
+  h_{\ell+1}
+  =
+  F_\ell(h_\ell)
+  +
+  A_\psi(h_\ell),
+\end{equation}
+
+여기서 $F_\ell$은 pretrained layer이고 $A_\psi$는 작은 adapter이다. Adapter는 robot-specific signal을 넣기 좋은 위치를 제공한다. VLA-Adapter류 논문은 이 관점에서 읽을 수 있다.
+
+LoRA류 방법은 weight update를 low-rank로 제한한다.
+
+\begin{equation}
+  W'
+  =
+  W
+  +
+  BA,
+  \qquad
+  B \in \mathbb{R}^{d \times r},\;
+  A \in \mathbb{R}^{r \times k}.
+\end{equation}
+
+$r$이 작으면 학습 파라미터 수가 줄어든다. 그러나 rank가 너무 작으면 robot action adaptation이 부족할 수 있다. 따라서 parameter-efficient tuning 논문은 parameter count만 보고해서는 부족하고, success rate, latency, memory, forgetting을 함께 보여야 한다.
+
+\section{Instruction tuning from understanding to manipulation}
+
+VLA instruction tuning의 어려움은 언어 이해와 행동 실행이 같은 것이 아니라는 점이다. ``서랍을 열어라''라는 지시는 텍스트 응답으로는 간단하지만, 로봇에게는 handle detection, approach, grasp, pull trajectory, force control을 요구한다.
+
+Instruction tuning dataset은 다음처럼 생각할 수 있다.
+
+\begin{equation}
+  \mathcal{D}_{\mathrm{inst}}
+  =
+  \{(\lang^{(i)}, \obs_{1:T_i}^{(i)}, \act_{1:T_i}^{(i)}, y^{(i)})\},
+\end{equation}
+
+여기서 $y^{(i)}$는 optional language rationale, subgoal, success label일 수 있다. 중요한 것은 $y$가 실제 행동 개선에 도움을 주는가이다. 많은 reasoning-style VLA는 explanation을 생성하지만, explanation이 closed-loop success를 올리는지는 별도 검증이 필요하다.
+
+\section{Post-training}
+
+Post-training은 supervised fine-tuning 이후 실행 품질을 보정하는 단계이다. VLA에서는 다음 유형이 중요하다.
+
+\begin{enumerate}
+  \item interaction-based correction: 실행 중 실패를 보고 다시 학습한다.
+  \item simulator verified reward: 시뮬레이터에서 task success를 확인해 reward를 준다.
+  \item human feedback: 사람이 trajectory 또는 행동 결과를 평가한다.
+  \item preference optimization: 더 좋은 trajectory를 선호하도록 학습한다.
+  \item safety-aware correction: 위험 행동을 penalize한다.
+\end{enumerate}
+
+이를 reward 기반 objective로 쓰면 다음과 같다.
+
+\begin{equation}
+  \max_\theta
+  \mathbb{E}_{\tau \sim \pi_\theta}
+  \left[
+  R(\tau,\lang)
+  -
+  \beta
+  D_{\mathrm{KL}}(\pi_\theta \,\|\, \pi_{\mathrm{ref}})
+  \right].
+  \label{eq:rft_objective}
+\end{equation}
+
+$\pi_{\mathrm{ref}}$는 supervised fine-tuned reference policy이다. KL term은 post-training이 기존 policy를 너무 멀리 벗어나지 않게 한다. VLA-RFT류 접근은 이 식의 실제 구현으로 볼 수 있다.
+
+\section{Verifier와 reward의 위험}
+
+Post-training에서 가장 중요한 위험은 reward hacking이다. Verifier가 성공을 잘못 판단하면 policy는 실제 과제 성공이 아니라 verifier를 속이는 방향으로 학습할 수 있다. 시뮬레이터 reward도 마찬가지이다. 시뮬레이터의 물리, object model, contact dynamics가 실제와 다르면 post-training된 policy가 real robot에서 약할 수 있다.
+
+따라서 reward 기반 VLA 논문은 다음 질문에 답해야 한다.
+
+\begin{enumerate}
+  \item reward 또는 verifier가 무엇을 기준으로 success를 판단하는가?
+  \item reward가 language instruction의 모든 제약을 반영하는가?
+  \item simulator와 real robot 사이의 gap을 측정했는가?
+  \item post-training 후 unsafe behavior가 늘지 않았는가?
+  \item reference policy 대비 어떤 failure mode가 줄었는가?
+\end{enumerate}
+
+\section{데이터 효율과 scaling}
+
+Fine-tuning 논문은 data efficiency를 보여야 한다. 단순히 많은 데이터를 넣어 좋아졌다면 방법의 contribution인지 데이터 규모의 효과인지 구분하기 어렵다. 데이터 개수 $N$에 따른 성능을 다음처럼 볼 수 있다.
+
+\begin{equation}
+  \mathrm{SR}(N)
+  =
+  a - bN^{-\alpha}.
+\end{equation}
+
+$\alpha$가 클수록 데이터 증가에 따른 성능 개선이 빠르다. 좋은 fine-tuning 방법은 같은 $N$에서 더 높은 성공률을 보이거나, 같은 성공률을 더 작은 $N$으로 달성해야 한다. 이를 sample efficiency라고 한다.
+
+또한 fine-tuning은 speed와도 연결된다. 작은 adapter만 학습하면 학습 비용은 줄지만 inference 구조에 따라 latency가 늘 수도 있다. 따라서 training efficiency와 inference efficiency를 구분해야 한다.
+
+\section{평가 기준}
+
+Fine-tuning과 post-training 논문을 평가할 때는 다음 항목을 확인한다.
+
+\begin{enumerate}
+  \item 어떤 파라미터가 학습되고 어떤 파라미터가 고정되는가?
+  \item action head와 action normalization은 어떻게 정의되는가?
+  \item train/test split은 task, object, scene, instruction 기준으로 분리되는가?
+  \item data size ablation이 있는가?
+  \item baseline은 full fine-tuning, frozen backbone, adapter-only를 포함하는가?
+  \item post-training reward나 verifier의 정확도는 검증되는가?
+  \item real robot rollout에서 improvement가 유지되는가?
+\end{enumerate}
+
+\section{요약}
+
+VLA fine-tuning은 pretrained model을 특정 로봇과 과제에 맞추는 과정이다. Full fine-tuning은 강하지만 비용과 forgetting 위험이 있고, frozen backbone은 안정적이지만 action mismatch가 남을 수 있다. Adapter와 LoRA류 방법은 비용과 적응력 사이의 절충을 제공한다. Post-training은 reward, verifier, interaction feedback을 통해 실행 품질을 보정하지만, reward hacking과 sim-to-real gap을 조심해야 한다.
+
+다음 장에서는 fine-tuned VLA를 실제 제어 주기 안에서 실행하기 위한 효율성 문제를 다룬다. Action representation과 fine-tuning이 성능을 만든다면, efficient VLA는 그 성능을 실제 로봇 시간 안에 집어넣는 문제이다.
+
+\begin{warningbox}{Formal objective와 engineering score의 구분}
+이 장의 수식은 많은 경우 논문이 실제로 최적화한 objective라기보다 fine-tuning design choice를 비교하기 위한 conceptual scoring function이다. \(\mathcal{L}_{\mathrm{BC}}\), cross entropy, diffusion loss처럼 실제 학습 loss와, success-latency-memory-risk를 묶은 engineering utility를 계속 구분해야 한다.
+\end{warningbox}
+
+\begin{casebox}{Case study: OpenVLA-OFT}
+Kim, Finn, and Liang (2025)의 OpenVLA-OFT는 OpenVLA를 대표 base model로 두고 action decoding, action representation, learning objective를 체계적으로 바꾼다. OFT recipe는 parallel decoding, action chunking, continuous action representation, L1 regression objective를 결합해 LIBERO 평균 success를 76.5\%에서 97.1\%로 올리고 action generation throughput을 26\(\times\) 높였다고 보고한다. 이 사례는 fine-tuning 장과 efficient VLA 장을 동시에 읽어야 하는 이유를 보여 준다.
+\end{casebox}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{Claim-source-evidence-caution map for fine-tuning}
+  \label{tab:ch5_claim_source}
+  \begin{tabularx}{\textwidth}{L{31mm}L{28mm}L{48mm}Y}
+    \toprule
+    Claim & Source & Evidence & Caution \\
+    \midrule
+    Open VLA backbone은 adaptation base가 될 수 있다 & OpenVLA \citep{openvla} & 7B open VLA, 970k demonstrations, public model artifacts & Public checkpoint가 있어도 target robot controller adaptation은 별도 문제이다. \\
+    Fine-tuning recipe는 success와 speed를 함께 바꾼다 & OpenVLA-OFT \citep{openvlaoft} & LIBERO 76.5\%\(\rightarrow\)97.1\%, throughput 26\(\times\) 보고 & Throughput 정의, hardware, baseline protocol이 같은지 확인한다. \\
+    Generalist policy는 small-data adaptation의 출발점이다 & Octo \citep{octo} & Open X-Embodiment 기반 800k trajectory pretraining과 fine-tuning interface & In-domain data mixture와 test split이 일반화 claim을 좌우한다. \\
+    Open-world generalization은 data mixture와 semantic prediction을 요구한다 & \(\pi_{0.5}\) \citep{pi05} & Heterogeneous co-training, web data, multiple robot evidence & Emerging-front preprint이므로 source status와 artifact completeness를 표시한다. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{sourcebox}{Key papers}
+\begin{itemize}
+  \item Kim et al. (2024), OpenVLA: open VLA의 base model과 consumer GPU fine-tuning 가능성을 확인할 수 있다.
+  \item Kim, Finn, and Liang (2025), OpenVLA-OFT, RSS 2025: fine-tuning recipe가 speed와 success를 동시에 바꾸는 대표 사례이다.
+  \item Octo Model Team et al. (2024), Octo: in-domain data가 적을 때 generalist policy를 어떻게 fine-tuning하는지 볼 수 있다.
+  \item Physical Intelligence et al. (2025), \(\pi_{0.5}\): heterogeneous co-training, semantic prediction, web data를 결합한 open-world generalization 사례이다.
+  \item NVIDIA et al. (2025), GR00T N1: humanoid VLA에서 real, synthetic, human video data mixture를 쓰는 adaptation 사례이다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Advanced]}
+OpenVLA-OFT의 improvement를 success, throughput, action representation, objective 네 축으로 분해하고, 어떤 변화가 model-centric이고 어떤 변화가 system-centric인지 표시하라.
+\end{assignmentbox}

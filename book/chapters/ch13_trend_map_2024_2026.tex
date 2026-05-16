@@ -1,0 +1,262 @@
+\chapter{2024--2026 VLA Trend Map}
+\label{ch:trend_map}
+
+12장까지는 VLA를 구성 요소별로 보았다. 이 장에서는 같은 내용을 시간 축과 연구 축으로 다시 묶는다. 2024--2026년 VLA 흐름은 ``VLM에 action head를 붙였다''는 단순한 이야기로 설명되지 않는다. 더 정확한 흐름은 pretrained VLM prior를 robot policy로 바꾸기 위해 action representation, robot data mixture, fine-tuning, efficient inference, manipulation evaluation, reasoning, world model, safety가 동시에 발전한 것이다.
+
+\section{큰 흐름}
+
+VLA 트렌드는 세 단계로 요약할 수 있다. 단, 2026년 항목은 확정된 합의라기보다 2025--2026년에 관측되는 emerging research fronts로 읽어야 한다.
+
+\begin{enumerate}
+  \item 2024년: VLM 기반 robot policy가 실제 manipulation에서 작동할 수 있음을 보이는 단계.
+  \item 2025년: OpenVLA, Octo, RT 계열 이후 fine-tuning, action chunking, post-training, efficient VLA가 본격화되는 단계.
+  \item 2025--2026년 emerging fronts: reasoning, world model, safety, multi-embodiment, deployment constraint가 핵심 쟁점으로 떠오르는 단계.
+\end{enumerate}
+
+이 구분은 엄밀한 연도 경계라기보다 연구 질문의 이동을 나타낸다. 초기 질문은 ``된다/안 된다''였고, 중간 질문은 ``더 잘/더 빨리/더 싸게 되는가''였고, 이후 질문은 ``실제 환경에서 신뢰할 수 있는가''로 바뀐다.
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[node distance=4mm, transform shape, scale=0.96]
+    \node[vlablock] (rt2) {RT-2\\VLA transfer};
+    \node[vlablock, right=of rt2] (octo) {Octo/OpenVLA\\open generalist};
+    \node[vlablock, right=of octo] (pi0) {\(\pi_0\)\\flow VLA};
+    \node[vlablock, right=of pi0] (oft) {OpenVLA-OFT\\fine-tuning};
+    \node[vlablock, below=of octo] (fast) {FAST/VQ-VLA\\action tokens};
+    \node[vlablock, below=of pi0] (small) {SmolVLA\\compact VLA};
+    \node[vlablock, below=of oft] (hum) {GR00T/Gemini/Helix\\humanoid/closed VLA};
+    \node[vlablock, right=of hum] (world) {WorldVLA/VLA-OS\\reasoning/world};
+    \draw[vlaarrow] (rt2) -- (octo);
+    \draw[vlaarrow] (octo) -- (pi0);
+    \draw[vlaarrow] (pi0) -- (oft);
+    \draw[vlaarrow] (octo) -- (fast);
+    \draw[vlaarrow] (pi0) -- (small);
+    \draw[vlaarrow] (oft) -- (hum);
+    \draw[vlaarrow] (hum) -- (world);
+  \end{tikzpicture}
+  \caption{Author-created schematic. 2024--2026 VLA trend timeline. 이 도식은 publication priority가 아니라 연구 질문의 이동을 나타낸다: open generalist policy, flow/action representation, optimized fine-tuning, compact deployment, humanoid/closed industrial VLA, reasoning/world model.}
+  \label{fig:vla_trend_timeline}
+\end{figure}
+
+\section{Trend axes}
+
+VLA 연구는 다음 여덟 축으로 정리할 수 있다.
+
+\begin{table}[t]
+  \centering
+  \caption{2024--2026 VLA 주요 트렌드 축}
+  \label{tab:vla_trend_axes}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{30mm}X}
+    \toprule
+    축 & 핵심 질문 \\
+    \midrule
+    Scaling & 더 큰 VLM과 더 큰 robot data가 policy 성능을 얼마나 올리는가 \\
+    Action representation & continuous, discrete, diffusion, chunk 중 무엇이 실행 안정성을 높이는가 \\
+    Post-training & imitation 이후 task-specific adaptation과 preference/success feedback을 어떻게 쓰는가 \\
+    Efficiency & latency, memory, decoding step을 줄이면서 success를 유지할 수 있는가 \\
+    Manipulation & contact-rich, long-horizon, dexterous task에서 실제로 작동하는가 \\
+    Benchmark & offline, simulation, real robot metric이 같은 결론을 주는가 \\
+    Reasoning/world model & subgoal, uncertainty, rollout, recovery를 행동에 연결하는가 \\
+    Safety/deployment & OOD, failure, human intervention, safety envelope를 검증하는가 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+이 표의 축은 독립적이지 않다. 예를 들어 action chunking은 action representation이면서 efficiency 기법이고, reasoning은 benchmark 설계와 safety를 동시에 바꾼다. 좋은 trend analysis는 논문을 하나의 축에만 넣지 않고, 어느 축의 조합을 다루는지 본다.
+
+\section{2024: generalist robot policy의 가능성}
+
+2024년 전후의 핵심 분위기는 robot foundation model의 가능성을 확인하는 것이었다. 대규모 vision-language pretraining이 물체, 속성, 관계, instruction understanding에 강한 prior를 제공하고, 여기에 robot trajectory를 fine-tuning하면 다양한 manipulation task를 수행할 수 있다는 방향이다.
+
+\begin{equation}
+  \theta_{\mathrm{VLA}}
+  =
+  \theta_{\mathrm{VLM}}
+  +
+  \Delta\theta_{\mathrm{robot}}.
+\end{equation}
+
+이 시기 논문을 읽을 때 중요한 질문은 ``VLM prior가 실제로 무엇을 도왔는가''이다. 언어 다양성인가, object recognition인가, unseen object grounding인가, 아니면 단순히 큰 backbone으로 인한 representation gain인가. 초기 성공은 중요하지만, evaluation이 제한된 경우도 많으므로 benchmark 조건을 함께 봐야 한다.
+
+\section{2025: fine-tuning과 효율성의 해}
+
+2025년의 큰 흐름은 VLA를 실제 과제에 맞게 조정하는 방법으로 이동한다. OpenVLA-style 모델을 특정 robot, 특정 task, 특정 action space에 맞게 fine-tuning하고, LoRA, adapter, OFT, action head 교체, data mixture tuning이 중요해진다. OpenVLA-OFT는 이 흐름의 명확한 anchor이다. 논문은 parallel decoding, action chunking, continuous action representation, L1 objective를 결합해 LIBERO 평균 success와 action generation throughput을 동시에 개선했다고 보고한다.
+
+\begin{equation}
+  \min_{\Delta\theta}
+  \mathcal{L}_{\mathrm{robot}}
+  (\theta_0+\Delta\theta)
+  \quad
+  \mathrm{s.t.}
+  \quad
+  \|\Delta\theta\| \le \epsilon.
+\end{equation}
+
+이 식은 full fine-tuning보다 parameter-efficient adaptation의 문제의식을 보여준다. Robot data는 비싸고 domain-specific하기 때문에, pretrained capability를 망가뜨리지 않으면서 필요한 행동만 조정하는 것이 중요하다.
+
+동시에 efficient VLA가 부상한다. 실제 robot loop에서는 큰 모델이 느리면 사용할 수 없다.
+
+\begin{equation}
+  \tau_{\mathrm{sensor}}
+  +
+  \tau_{\mathrm{model}}
+  +
+  \tau_{\mathrm{decode}}
+  +
+  \tau_{\mathrm{control}}
+  \le
+  T_{\mathrm{loop}}.
+\end{equation}
+
+따라서 2025년 흐름은 ``큰 모델이 된다''에서 ``큰 모델을 어떻게 빠르게 쓰는가''로 이동한다. Token pruning, sparse expert, speculative decoding, diffusion step reduction, action chunking은 모두 이 방향의 도구이다. SmolVLA는 compact model과 asynchronous inference stack을 통해 이 문제를 system design 관점에서 다루고, FAST/VQ-VLA는 action tokenization 자체를 효율성과 실행 품질의 병목으로 다룬다.
+
+\section{Manipulation 중심성}
+
+Trend map에서 manipulation은 중앙에 놓인다. 이유는 단순하다. VLA의 주장 대부분이 manipulation에서 실제로 검증된다. Object grounding, affordance, action chunk, contact, safety, recovery가 한꺼번에 나타난다.
+
+\begin{equation}
+  \mathrm{VLA\ maturity}
+  \not\approx
+  \mathrm{language\ score};
+  \qquad
+  \mathrm{VLA\ maturity}
+  \approx
+  \mathrm{closed\mbox{-}loop\ task\ success}.
+\end{equation}
+
+Manipulation 논문을 볼 때는 task complexity를 반드시 구분해야 한다. Pick-and-place, articulated object, tool use, deformable object, dexterous hand, bimanual manipulation은 서로 다른 난이도이다. 같은 success rate라도 task class가 다르면 의미가 다르다.
+
+\section{Benchmark와 데이터셋의 정치성}
+
+VLA 트렌드에서 benchmark는 중립적인 측정 도구가 아니다. 어떤 benchmark가 유행하는지에 따라 연구 방향이 바뀐다. Offline action prediction benchmark가 중심이면 action token과 loss가 중요해지고, real-robot success benchmark가 중심이면 controller와 robustness가 중요해진다.
+
+\begin{equation}
+  \mathrm{Score}
+  =
+  f(\mathrm{model}, \mathrm{data}, \mathrm{controller}, \mathrm{protocol}).
+\end{equation}
+
+따라서 trend를 읽을 때는 점수의 상승이 모델 때문인지, 데이터 때문인지, evaluation protocol 때문인지 분리해야 한다. 8장의 message를 다시 쓰면, VLA 분야의 SOTA는 항상 benchmark 조건부 SOTA이다.
+
+\section{Reasoning과 world model의 재등장}
+
+초기 end-to-end VLA는 perception-to-action mapping을 강조했다. 그러나 long-horizon task, failure recovery, safety를 다루기 시작하면서 reasoning과 world model이 다시 중요해진다.
+
+\begin{equation}
+  \pi(a_t \mid o_t,q)
+  \quad \rightarrow \quad
+  \pi(a_t \mid o_t,q,z_t,\hat{\tau}_{t:t+H}).
+\end{equation}
+
+$z_t$는 plan, belief, diagnosis이고, $\hat{\tau}$는 world model rollout이다. 이 전환은 classical robotics로의 회귀가 아니다. 오히려 VLM/VLA의 semantic prior와 robotics의 planning/control 구조를 결합하려는 움직임이다.
+
+2025--2026년 emerging front에서 중요한 연구 질문은 reasoning을 어떻게 action-level improvement로 검증할 것인가이다. 좋은 reasoning 문장을 생성하는 것과 실제 recovery success를 높이는 것은 다르다.
+
+\section{Safety as first-class objective}
+
+VLA가 lab demo를 넘어가려면 safety가 부가 항목이 아니라 objective가 되어야 한다.
+
+\begin{equation}
+  \max_\pi
+  \mathbb{E}[R(\tau)]
+  \quad
+  \mathrm{s.t.}
+  \quad
+  \Pr(C_i(\tau)>0) \le \delta_i.
+\end{equation}
+
+이 constrained formulation은 2024년의 demo 중심 논문보다 2026년 이후 배포 지향 연구에서 더 중요하다. 특히 human-robot interaction, household robot, humanoid, driving에서는 safety envelope와 intervention protocol 없이는 VLA를 평가할 수 없다.
+
+\section{연구 지형도}
+
+VLA 연구 지형은 다음처럼 네 quadrant로 볼 수 있다.
+
+\begin{table}[t]
+  \centering
+  \caption{VLA 연구 지형의 네 quadrant}
+  \label{tab:vla_quadrants}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{34mm}X}
+    \toprule
+    Quadrant & 대표 질문 \\
+    \midrule
+    Model-centric VLA & backbone, architecture, action head, tokenization을 어떻게 설계하는가 \\
+    Data-centric VLA & robot dataset, data mixture, annotation, synthetic data를 어떻게 구성하는가 \\
+    System-centric VLA & latency, controller, safety layer, deployment stack을 어떻게 통합하는가 \\
+    Evaluation-centric VLA & benchmark, OOD split, failure taxonomy, reproducibility를 어떻게 설계하는가 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+좋은 연구 주제는 이 중 하나만 고르는 것이 아니라 두 축의 교차점에서 나온다. 예를 들어 efficient action tokenizer는 model-centric이면서 system-centric이고, failure-aware benchmark는 evaluation-centric이면서 safety-centric이다.
+
+\begin{table}[t]
+  \centering
+  \caption{Evidence-level legend for trend claims}
+  \label{tab:trend_evidence_legend}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{14mm}X}
+    \toprule
+    Level & 의미 \\
+    \midrule
+    A & Peer-reviewed 또는 accepted paper이고 code, benchmark, real-robot evidence 중 일부가 재현 가능하다. \\
+    B & arXiv preprint와 project artifact가 있고 실험 protocol을 어느 정도 확인할 수 있다. \\
+    C & Project page, company report, closed demo 중심 source이다. \\
+    D & Survey-only 또는 claim-level source로, 핵심 성능 주장에는 보조 근거로만 쓴다. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{Open and academic VLA trend claims}
+  \label{tab:claim_source_mapping_open}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{34mm}p{38mm}p{14mm}X}
+    \toprule
+    Trend claim & Anchor sources & Level & 읽을 때 확인할 것 \\
+    \midrule
+    Open generalist VLA & Octo, OpenVLA, Open X-Embodiment & B & Dataset scale, embodiment split, action interface, checkpoint/code 공개 범위. \\
+    Fine-tuning recipe & OpenVLA-OFT & B & 같은 base model 통제, LIBERO/real robot 결과, throughput 정의. \\
+    Flow/action chunking & \(\pi_0\), OpenVLA-OFT & B & Flow objective, chunk length, latency-success curve, controller frequency. \\
+    Action tokenization & FAST, VQ-VLA & A/B & Token reconstruction, closed-loop success, high-frequency dexterity, tokenizer-only ablation. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{Emerging and industrial VLA trend claims}
+  \label{tab:claim_source_mapping_emerging}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{34mm}p{38mm}p{14mm}X}
+    \toprule
+    Trend claim & Anchor sources & Level & 읽을 때 확인할 것 \\
+    \midrule
+    Compact deployment & SmolVLA & B & Consumer hardware 목표, async stack, task coverage, benchmark comparability. \\
+    Humanoid/industrial VLA & GR00T N1, Helix, Gemini Robotics & B/C & Peer-reviewed 여부, 공개 범위, motor command interface, company demo 한계. \\
+    Reasoning/world model & VLA-OS, WorldVLA, Gemini Robotics-ER & B/C & Reasoning text가 아니라 recovery, planning utility, safety metric 개선. \\
+    Safety/deployment & OpenVLA-OFT, GR00T N1, Gemini Robotics & B/C & Latency, safety envelope, intervention, logging, closed-stack governance. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{요약}
+
+2024--2026년 VLA 트렌드는 VLM을 robot action으로 연결하는 초기 가능성에서 출발해, fine-tuning, efficiency, manipulation realism, benchmark rigor, reasoning, world model, safety, multi-embodiment로 확장되었다. 다음 단계의 핵심은 더 큰 모델을 만드는 것만이 아니라, 어떤 action interface가 안정적인지, 어떤 데이터가 일반화를 만드는지, 어떤 평가가 실제 배포 위험을 드러내는지 밝히는 것이다.
+
+다음 장에서는 이 trend map을 바탕으로 좋은 VLA 연구 주제를 고르는 방법을 다룬다. 단순히 최신 모델을 따라가는 것이 아니라, 측정 가능한 병목과 검증 가능한 contribution을 선택하는 기준을 세운다.
+
+\begin{sourcebox}{Key papers}
+\begin{itemize}
+  \item Open X-Embodiment Collaboration (2023), project/paper: 1M+ real robot trajectories와 22 embodiments가 data-centric trend의 anchor이다.
+  \item Octo Model Team et al. (2024), Octo, arXiv preprint: 800k trajectories 기반 open-source generalist policy이다.
+  \item Kim et al. (2024), OpenVLA, arXiv preprint: 7B open-source VLA, 970k demonstrations, public checkpoints/code를 제공한다.
+  \item Black et al. (2024/2026), \(\pi_0\), RSS 2025: VLM plus flow matching architecture가 general robot control의 anchor이다.
+  \item Kim, Finn, and Liang (2025), OpenVLA-OFT, RSS 2025: fine-tuning, action chunking, continuous action, speed/success trend의 anchor이다.
+  \item Shukor et al. (2025), SmolVLA: compact VLA와 affordable robotics trend의 anchor이다.
+  \item NVIDIA et al. (2025), GR00T N1, and Google DeepMind Gemini Robotics page: humanoid/closed industrial VLA를 분류하기 위한 anchor이다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Intermediate]}
+\cref{tab:claim_source_mapping_open,tab:claim_source_mapping_emerging}에서 한 trend claim을 골라, anchor source 두 편의 evidence가 충분한지 13-question framework의 검증/비교/한계 항목으로 평가하라.
+\end{assignmentbox}

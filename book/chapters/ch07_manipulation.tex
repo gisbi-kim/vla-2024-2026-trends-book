@@ -1,0 +1,307 @@
+\chapter{Manipulation이 VLA의 주전장이 된 이유}
+\label{ch:manipulation}
+
+6장에서는 VLA를 제어 loop 안에 넣기 위해 필요한 latency, memory, decoding step, action chunking의 문제를 다루었다. 이 장에서는 그 다음 병목인 물리 접촉을 다룬다. VLA 연구가 manipulation에 집중되는 이유는 단순히 실험실에 로봇팔이 많아서가 아니다. Manipulation은 언어 지시, 시각 인식, 공간 추론, 접촉 동역학, 폐루프 보정이 한 과제 안에서 동시에 드러나는 영역이다. 따라서 VLA가 정말 robot policy인지, 아니면 그럴듯한 multimodal sequence model인지 가장 빨리 드러나는 시험장이다.
+
+\section{Manipulation 문제의 구조}
+
+Manipulation은 환경 안의 물체 상태를 바꾸는 행동이다. 이동 로봇이 자신의 상태 $x_t$를 바꾸는 문제에 가깝다면, manipulation은 로봇 상태와 물체 상태를 함께 바꾸는 문제이다.
+
+\begin{equation}
+  s_t =
+  \left[
+    x_t^{\mathrm{robot}},
+    x_t^{\mathrm{object}},
+    x_t^{\mathrm{env}}
+  \right],
+  \qquad
+  a_t =
+  \left[
+    \Delta p_t,
+    \Delta R_t,
+    g_t
+  \right].
+\end{equation}
+
+여기서 $\Delta p_t$와 $\Delta R_t$는 end-effector의 병진 및 회전 명령이고, $g_t$는 gripper 또는 hand command이다. 실제 시스템에서는 joint velocity, torque, impedance parameter, suction command, multi-finger command 등으로 더 세분화된다. 중요한 점은 action이 언어 token처럼 의미 단위로만 평가되지 않는다는 것이다. 같은 ``컵을 집어라''라는 지시라도, 손끝 위치가 몇 cm 어긋나면 grasp가 실패하고, 회전이 잘못되면 충돌이 발생한다.
+
+VLA 관점에서 manipulation task는 다음 mapping으로 볼 수 있다.
+
+\begin{equation}
+  \pi_\theta:
+  \left(
+    I_{1:t},
+    q,
+    h_{1:t},
+    r_t
+  \right)
+  \mapsto
+  a_{t:t+H-1}.
+\end{equation}
+
+$I_{1:t}$는 RGB 또는 RGB-D 관측, $q$는 언어 지시, $h_{1:t}$는 proprioception과 과거 행동, $r_t$는 optional retrieval 또는 memory context이다. 출력은 single action일 수도 있고, $H$ 길이의 action chunk일 수도 있다. Manipulation VLA에서 핵심은 이 mapping이 물체, 관계, 접촉 가능성, 시간적 진행 상태를 함께 반영해야 한다는 점이다.
+
+\section{왜 pick-and-place에서 시작했는가}
+
+많은 VLA benchmark와 robot learning dataset은 pick-and-place, drawer opening, button pressing, object rearrangement에서 시작한다. 이유는 명확하다. 이 과제들은 언어로 명시하기 쉽고, 성공 여부를 비교적 명확히 측정할 수 있으며, 카메라와 로봇팔로 반복 수집하기 쉽다.
+
+\begin{table}[t]
+  \centering
+  \caption{Manipulation 과제 유형과 VLA가 요구받는 능력}
+  \label{tab:manipulation_types}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{32mm}p{32mm}X}
+    \toprule
+    과제 유형 & 대표 예시 & VLA에 요구되는 능력 \\
+    \midrule
+    Pick-and-place & 컵 집기, 블록 옮기기 & 물체 grounding, grasp pose 추론, 짧은 horizon 제어 \\
+    Articulated object & 서랍 열기, 문 손잡이 돌리기 & joint 구조 추론, 접촉 유지, force 방향 제어 \\
+    Tool use & 주걱, 집게, 걸이 사용 & 도구 affordance, object-tool relation, 긴 horizon 계획 \\
+    Deformable object & 천 접기, 케이블 정리 & 형태 변화 예측, partial observability, 실패 복구 \\
+    Dexterous manipulation & 손가락 회전, in-hand regrasp & 고차원 action, 접촉 안정성, tactile feedback \\
+    Bimanual manipulation & 양손 조립, 큰 물체 운반 & 역할 분담, synchronization, collision avoidance \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Pick-and-place가 쉬운 과제라는 뜻은 아니다. 다만 성공 조건이 비교적 분명하다. 물체가 목표 영역 안에 놓였는지, gripper가 물체를 떨어뜨리지 않았는지, 충돌이 없었는지를 판정할 수 있다. 그래서 VLA 논문은 초기에 ``언어 지시를 보고 물체를 골라 실제 로봇이 움직일 수 있는가''를 보여주기 위해 pick-and-place를 자주 사용한다.
+
+하지만 pick-and-place만으로 VLA의 실력을 판단하면 위험하다. 이 과제는 많은 경우 scene이 정리되어 있고, 물체 종류가 제한되어 있으며, 접촉 시간이 짧다. 실제 manipulation은 물체가 가려지고, 목표가 중간에 바뀌며, 접촉이 길게 유지되고, 실패 후 복구가 필요하다. 따라서 2024--2026년의 흐름은 단순 pick-and-place 성공률에서 long-horizon, contact-rich, dexterous, bimanual manipulation으로 확장되는 방향으로 읽어야 한다.
+
+\section{Language grounding과 affordance}
+
+Manipulation에서 언어는 목표를 지정한다. 그러나 로봇은 문장을 그대로 실행할 수 없다. 문장은 물체와 행동 가능성으로 grounding되어야 한다.
+
+\begin{equation}
+  q
+  \rightarrow
+  \left(
+    o^\star,
+    r^\star,
+    \phi^\star
+  \right),
+\end{equation}
+
+여기서 $o^\star$는 대상 물체, $r^\star$는 다른 물체 또는 장소와의 관계, $\phi^\star$는 필요한 조작 primitive 또는 affordance이다. 예를 들어 ``빨간 컵을 접시 오른쪽에 놓아라''라는 지시는 빨간 컵의 segmentation, 접시의 위치, 오른쪽이라는 관계, 컵을 잡고 옮기는 행동으로 분해되어야 한다.
+
+Affordance는 물체가 어떤 행동을 허용하는지에 대한 함수로 볼 수 있다.
+
+\begin{equation}
+  A(o, a, c)
+  =
+  \Pr(\mathrm{success} \mid o, a, c),
+\end{equation}
+
+여기서 $c$는 scene context이다. VLA가 강한 이유는 pretrained VLM이 물체명, 속성, 관계, 상식적 affordance에 대한 prior를 제공한다는 점이다. 하지만 이 prior는 물리적으로 검증된 지식이 아니다. VLM은 ``손잡이를 잡는다''는 말의 의미를 알 수 있지만, 현재 카메라 각도에서 손잡이의 실제 6D pose, 마찰, 충돌 여유, 로봇의 reachability를 자동으로 보장하지 않는다.
+
+그래서 manipulation VLA는 language grounding과 geometry grounding을 분리해서 읽어야 한다. 좋은 모델은 instruction-object alignment만 잘하는 것이 아니라, 그 alignment가 실행 가능한 grasp, push, pull, rotate action으로 이어진다는 것을 보여야 한다.
+
+\section{Contact dynamics가 만드는 난점}
+
+Manipulation이 navigation이나 visual question answering보다 어려운 결정적 이유는 접촉이다. 접촉이 없을 때 물체 상태는 거의 변하지 않는다. 접촉이 발생하는 순간부터 동역학은 불연속적이고 민감해진다.
+
+\begin{equation}
+  M(q_r)\ddot{q}_r + C(q_r,\dot{q}_r)\dot{q}_r + g(q_r)
+  =
+  \tau + J_c(q_r)^\top \lambda,
+\end{equation}
+
+$q_r$는 로봇 joint configuration, $\tau$는 actuator torque, $J_c$는 contact Jacobian, $\lambda$는 contact force이다. VLA policy가 직접 torque를 내지 않더라도, end-effector command가 low-level controller를 통해 결국 이 식의 접촉항을 만든다.
+
+Grasp 안정성도 단순한 위치 맞추기가 아니다. 점 접촉 모델에서는 접촉력이 마찰 원뿔 안에 있어야 한다.
+
+\begin{equation}
+  \| f_t^{\mathrm{tan}} \|
+  \le
+  \mu f_t^{\mathrm{normal}}.
+\end{equation}
+
+VLA가 카메라와 언어만으로 행동을 생성하면 $\mu$, 물체 질량, compliance, 손가락 접촉 위치 같은 변수를 정확히 알기 어렵다. 따라서 manipulation VLA의 실패는 종종 semantic error가 아니라 contact error이다. 모델은 올바른 물체를 고르고도 너무 빨리 닫거나, 잡는 위치가 낮거나, 목표점 근처에서 충돌하거나, 물체를 놓는 순간 안정성을 잃는다.
+
+\section{Closed-loop policy가 필요한 이유}
+
+Open-loop action chunking은 효율성을 높인다. 그러나 manipulation에서는 관측을 자주 다시 보는 것이 중요하다. 특히 접촉 전후에는 작은 오차가 누적된다.
+
+\begin{equation}
+  a_{t:t+H-1}
+  =
+  \pi_\theta(o_t, q),
+  \qquad
+  o_{t+k} \not\in \pi_\theta
+  \quad (1 \le k < H)
+\end{equation}
+
+위 식은 긴 chunk의 위험을 보여준다. $H$가 길수록 중간 관측 $o_{t+k}$가 policy에 반영되지 않는다. 물체가 미끄러지거나, gripper가 예상보다 늦게 닫히거나, 사람이 물체를 조금 움직이면 open-loop chunk는 실패할 수 있다.
+
+Closed-loop VLA는 다음과 같이 재계획한다.
+
+\begin{equation}
+  a_{t:t+H-1}
+  =
+  \pi_\theta(o_t, q),
+  \quad
+  a_{t+\Delta:t+\Delta+H-1}
+  =
+  \pi_\theta(o_{t+\Delta}, q, h_{1:t+\Delta}).
+\end{equation}
+
+문제는 재계획 빈도와 latency의 trade-off이다. 6장에서 보았듯이 VLA inference가 느리면 closed-loop라고 불러도 실제 제어 loop에는 늦게 들어온다. 그래서 manipulation에서는 efficient VLA와 closed-loop policy가 함께 필요하다. 접근 단계에서는 큰 chunk를 쓰고, 접촉 단계에서는 작은 chunk 또는 low-level reflex를 쓰는 hybrid 구조가 실용적이다.
+
+\section{Low-level controller와 VLA의 역할 분리}
+
+VLA가 모든 제어를 직접 담당해야 하는 것은 아니다. 실제 manipulation 시스템은 high-level policy, motion planner, impedance controller, gripper controller, safety monitor를 조합한다.
+
+\begin{equation}
+  q, I_t
+  \xrightarrow{\mathrm{VLA}}
+  z_t
+  \xrightarrow{\mathrm{planner/controller}}
+  u_t
+  \xrightarrow{\mathrm{robot}}
+  s_{t+1}.
+\end{equation}
+
+$z_t$는 target pose, waypoint, skill id, affordance map, action chunk일 수 있다. $u_t$는 joint command 또는 torque command이다. 공학적으로 좋은 VLA 논문은 VLA가 어느 수준의 결정을 내리는지 명확히 해야 한다. End-to-end라고 주장하면서 실제로는 hand-coded motion primitive가 대부분을 해결한다면, 모델의 기여를 과대평가할 수 있다.
+
+역으로, 모든 것을 neural policy로 처리하는 것도 항상 좋은 방향은 아니다. 알려진 기하 제약, collision checking, joint limit, force limit은 classical controller가 더 안정적으로 처리할 수 있다. VLA의 강점은 언어와 시각에서 목표와 상황을 해석하는 데 있고, low-level controller의 강점은 물리 제약을 빠르고 안정적으로 만족시키는 데 있다.
+
+\section{Data 관점: manipulation dataset의 편향}
+
+Manipulation VLA는 대규모 robot dataset에 의존한다. 그러나 데이터 수집은 비싸고 편향이 강하다. 같은 ``pick up the cup''이라도 로봇 종류, gripper 형태, 카메라 위치, 물체 set, table height, demonstration policy가 다르면 action distribution이 달라진다.
+
+\begin{equation}
+  p_{\mathcal{D}}(a \mid o,q)
+  \ne
+  p_{\mathrm{deploy}}(a \mid o,q).
+\end{equation}
+
+이 distribution shift는 VLA가 deployment에서 실패하는 주요 이유이다. Open X-Embodiment 계열 데이터는 다양한 robot embodiment를 모으지만, embodiment heterogeneity 자체가 또 다른 문제를 만든다. 같은 action token이 다른 로봇에서는 다른 물리적 의미를 가진다. 따라서 manipulation dataset을 읽을 때는 다음을 확인해야 한다.
+
+\begin{itemize}
+  \item 어떤 robot platform에서 수집되었는가.
+  \item action space가 joint, end-effector, discrete skill 중 무엇인가.
+  \item language instruction이 사람이 직접 쓴 것인지, template 또는 자동 생성인지.
+  \item 실패 trajectory가 포함되는가.
+  \item force, tactile, depth, proprioception이 포함되는가.
+  \item train task와 test task가 물체, 장면, 지시, embodiment 중 무엇에서 분리되는가.
+\end{itemize}
+
+Manipulation VLA의 일반화 주장은 이 항목 없이는 해석하기 어렵다. ``새 물체에 일반화''와 ``새 task에 일반화''와 ``새 robot에 일반화''는 서로 다른 주장이다.
+
+\section{Evaluation: 성공률만으로 충분하지 않다}
+
+Manipulation benchmark는 success rate를 자주 사용한다.
+
+\begin{equation}
+  \mathrm{SR}
+  =
+  \frac{1}{N}
+  \sum_{i=1}^{N}
+  \mathbb{I}
+  \left[
+    \mathrm{task}_i \; \mathrm{success}
+  \right].
+\end{equation}
+
+Success rate는 필요하지만 충분하지 않다. 특히 VLA는 언어 지시를 받기 때문에 성공 여부를 더 세분화해야 한다.
+
+\begin{equation}
+  \mathrm{Failure}
+  =
+  F_{\mathrm{semantic}}
+  \cup
+  F_{\mathrm{geometric}}
+  \cup
+  F_{\mathrm{contact}}
+  \cup
+  F_{\mathrm{temporal}}
+  \cup
+  F_{\mathrm{safety}}.
+\end{equation}
+
+Semantic failure는 잘못된 물체를 고르는 경우이고, geometric failure는 올바른 물체를 고르지만 pose가 틀리는 경우이다. Contact failure는 잡거나 누르거나 끌 때 힘과 접촉이 실패하는 경우이다. Temporal failure는 순서가 틀리거나 중간 상태를 복구하지 못하는 경우이다. Safety failure는 충돌, 과도한 force, workspace violation이다.
+
+좋은 평가표는 성공률과 함께 episode length, intervention count, collision rate, drop rate, recovery rate, latency, human instruction complexity를 보고해야 한다. 특히 ``실패 후 다시 시도해서 성공하는가''는 VLA가 단순 imitation을 넘어 interactive policy가 되는지 판단하는 중요한 지표이다.
+
+\section{Long-horizon manipulation}
+
+Long-horizon task에서는 하나의 instruction이 여러 subgoal을 포함한다.
+
+\begin{equation}
+  q
+  \rightarrow
+  (g_1, g_2, \ldots, g_K),
+  \qquad
+  \pi_\theta(o_t, q, g_k) \rightarrow a_t.
+\end{equation}
+
+예를 들어 ``서랍을 열고 숟가락을 꺼내 컵 옆에 놓아라''는 drawer opening, object localization, grasping, placing을 포함한다. 여기서는 VLA가 바로 action을 내는 것보다, subgoal 또는 skill sequence를 구성하는 능력이 중요해진다.
+
+Long-horizon manipulation은 두 가지 오류가 누적된다. 첫째, planning error이다. 필요한 subgoal을 빠뜨리거나 순서를 잘못 잡는다. 둘째, execution error이다. 각 subgoal을 수행하는 동안 작은 실패가 다음 단계의 초기 조건을 바꾼다. 따라서 long-horizon VLA는 hierarchical policy와 memory가 필요하다.
+
+\begin{equation}
+  \pi_\theta(a_t \mid o_t,q,h_t)
+  =
+  \sum_{z_t}
+  \pi_\theta(a_t \mid o_t,z_t,h_t)
+  p_\theta(z_t \mid o_t,q,h_t).
+\end{equation}
+
+$z_t$는 latent subtask, skill, option, waypoint가 될 수 있다. 이 분해는 모델이 task-level reasoning과 control-level action generation을 동시에 처리하지 않도록 돕는다.
+
+\section{Tactile과 force feedback}
+
+대부분의 VLA는 RGB 또는 RGB-D 중심이다. 그러나 manipulation에서 접촉 상태는 시각만으로 충분히 관측되지 않는다. 물체가 손가락 안에 들어온 뒤에는 카메라에서 가려지고, 미끄러짐은 작은 움직임으로만 나타난다. Force-torque sensor와 tactile sensor는 이 빈칸을 채운다.
+
+\begin{equation}
+  o_t =
+  \left[
+    I_t,
+    d_t,
+    q_t^{\mathrm{joint}},
+    f_t,
+    \tau_t,
+    T_t^{\mathrm{tactile}}
+  \right].
+\end{equation}
+
+문제는 tactile data가 대규모 web pretraining과 잘 연결되어 있지 않다는 점이다. 언어-이미지 모델은 인터넷 이미지와 텍스트로 pretraining할 수 있지만, tactile-language-action 데이터는 규모가 작고 센서마다 형식이 다르다. 그래서 tactile VLA는 2024--2026년 이후에도 중요한 연구 기회로 남아 있다. 특히 slip detection, grasp force adaptation, insertion task, deformable object manipulation에서는 tactile feedback이 성능 차이를 만들 가능성이 크다.
+
+\section{Manipulation 논문을 읽는 기준}
+
+Manipulation VLA 논문은 화려한 demonstration video만으로 평가하면 안 된다. 다음 질문을 반드시 확인해야 한다.
+
+\begin{enumerate}
+  \item 실제 로봇 실험인가, simulation인가, offline dataset 평가인가.
+  \item 성공률을 몇 episode, 몇 seed, 몇 object, 몇 task에서 측정했는가.
+  \item baseline이 같은 perception, 같은 controller, 같은 data budget을 쓰는가.
+  \item action space가 무엇이고, low-level controller가 얼마나 많은 일을 하는가.
+  \item failure case를 semantic, geometric, contact, temporal, safety로 분리했는가.
+  \item novel object, novel instruction, novel scene, novel embodiment 중 무엇을 일반화로 주장하는가.
+  \item real-time loop와 latency를 보고했는가.
+\end{enumerate}
+
+이 기준은 13-question framework와 연결된다. 특히 ``방법'', ``검증'', ``비교'', ``한계'', ``자원 공개'' 항목에서 manipulation 논문은 숨은 engineering detail이 많다. Controller와 dataset을 빼고 모델 구조만 보면 논문을 잘못 읽게 된다.
+
+\section{요약}
+
+Manipulation은 VLA가 언어와 시각을 실제 물리 행동으로 바꾸는 능력을 가장 직접적으로 검증하는 영역이다. VLM prior는 물체와 affordance를 해석하는 데 유용하지만, grasp 안정성, 접촉 동역학, force control, failure recovery는 별도의 공학적 문제로 남는다. 따라서 manipulation VLA의 핵심 질문은 ``문장을 이해했는가''가 아니라 ``이해한 내용을 real-time closed-loop contact task에서 안정적으로 실행했는가''이다.
+
+다음 장에서는 이 질문을 실제로 어떻게 측정하는지 다룬다. VLA 성능은 논문마다 다른 dataset과 benchmark 위에서 보고되기 때문에, benchmark 설계와 dataset 편향을 이해하지 못하면 2024--2026년의 성능 향상을 정확히 비교할 수 없다.
+
+\begin{casebox}{Case study: contact-rich manipulation}
+ForceVLA류 논문은 vision-language prior만으로는 접촉 상태, 미끄러짐, 과도한 힘, compliant motion을 충분히 다루기 어렵다는 점을 드러낸다. Manipulation VLA를 읽을 때 force, tactile, proprioception이 들어가면 단순히 modality가 늘어난 것이 아니라 failure taxonomy가 바뀐다. 성공률이 같아도 contact force violation이 줄었다면 safety와 deployment 관점에서 더 중요한 개선일 수 있다.
+\end{casebox}
+
+\begin{sourcebox}{Key papers}
+\begin{itemize}
+  \item Zhao et al. (2023), ACT/ALOHA: action chunking과 bimanual manipulation을 연결하는 선행 anchor이다.
+  \item Chi et al. (2023), Diffusion Policy: contact-rich continuous manipulation에서 action distribution modeling의 중요성을 보여 준다.
+  \item Kim et al. (2024), OpenVLA: multiple robot embodiments와 29 tasks 평가를 통해 generalist manipulation 논의를 연다.
+  \item Kim, Finn, and Liang (2025), OpenVLA-OFT: LIBERO와 real-world bimanual ALOHA에서 fine-tuning recipe를 평가한다.
+  \item ForceVLA 계열 논문: force-aware module이 contact failure를 줄이는지 확인하기 위한 최신 case study로 읽는다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Intermediate]}
+하나의 manipulation VLA 논문을 골라 semantic failure, geometric failure, contact failure, temporal failure, safety failure로 실패 사례를 재분류하라.
+\end{assignmentbox}

@@ -1,0 +1,188 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{vlabook}[2026/05/17 VLA Trends Mini Book Style]
+
+\RequirePackage{kotex}
+\RequirePackage{fontspec}
+\RequirePackage{amsmath,amssymb,mathtools,bm}
+\RequirePackage{graphicx}
+\RequirePackage{xcolor}
+\RequirePackage{booktabs}
+\RequirePackage{array}
+\RequirePackage{tabularx}
+\RequirePackage{longtable}
+\RequirePackage{enumitem}
+\RequirePackage{geometry}
+\RequirePackage{titlesec}
+\RequirePackage{titletoc}
+\RequirePackage{fancyhdr}
+\RequirePackage{tcolorbox}
+\RequirePackage{tikz}
+\RequirePackage[numbers,sort&compress]{natbib}
+\RequirePackage{hyperref}
+\RequirePackage[nameinlink,noabbrev]{cleveref}
+\RequirePackage{setspace}
+\RequirePackage{pdflscape}
+\usetikzlibrary{arrows.meta,positioning,fit,calc}
+
+\geometry{
+  a4paper,
+  inner=28mm,
+  outer=26mm,
+  top=28mm,
+  bottom=30mm,
+  headheight=15pt,
+  headsep=9mm
+}
+
+\setmainfont{TeX Gyre Termes}
+\setsansfont{TeX Gyre Heros}
+\setmonofont{TeX Gyre Cursor}
+\setmainhangulfont{Noto Serif CJK KR}
+\setsanshangulfont{Noto Sans CJK KR}
+\setmonohangulfont{Noto Sans Mono CJK KR}
+
+\linespread{1.18}
+\setlength{\parindent}{1.1em}
+\setlength{\parskip}{0.15em}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\setlist[itemize]{topsep=0.35em,itemsep=0.1em,leftmargin=1.7em}
+\setlist[enumerate]{topsep=0.35em,itemsep=0.1em,leftmargin=1.8em}
+
+\definecolor{VLADark}{HTML}{111827}
+\definecolor{VLAMid}{HTML}{374151}
+\definecolor{VLALight}{HTML}{F3F4F6}
+\definecolor{VLABlue}{HTML}{2563EB}
+\definecolor{VLATeal}{HTML}{0F766E}
+\definecolor{VLARed}{HTML}{B91C1C}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=VLABlue,
+  citecolor=VLATeal,
+  urlcolor=VLABlue,
+  pdftitle={Introduction to Vision-Language-Action Models and Their Trends},
+  pdfauthor={Giseop Kim}
+}
+
+\titleformat{\chapter}[display]
+  {\sffamily\bfseries\color{VLADark}}
+  {\Large Chapter \thechapter}
+  {0.5em}
+  {\Huge}
+  [\vspace{0.6em}\titlerule]
+
+\titleformat{\part}[display]
+  {\sffamily\bfseries\centering\color{VLADark}}
+  {\Large Part \thepart}
+  {0.8em}
+  {\Huge}
+  [\vspace{1em}\titlerule]
+
+\titleformat{\section}
+  {\sffamily\Large\bfseries\color{VLADark}}
+  {\thesection}
+  {0.65em}
+  {}
+
+\titleformat{\subsection}
+  {\sffamily\large\bfseries\color{VLAMid}}
+  {\thesubsection}
+  {0.65em}
+  {}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE]{\sffamily\small\thepage\quad Introduction to VLA Models}
+\fancyhead[RO]{\sffamily\small\leftmark\quad\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\newtcolorbox{conceptbox}[1]{
+  colback=VLALight,
+  colframe=VLABlue,
+  coltitle=VLADark,
+  title={#1},
+  fonttitle=\sffamily\bfseries,
+  boxrule=0.6pt,
+  arc=2mm,
+  left=3mm,
+  right=3mm,
+  top=2mm,
+  bottom=2mm
+}
+
+\newtcolorbox{warningbox}[1]{
+  colback=red!3,
+  colframe=VLARed,
+  coltitle=VLADark,
+  title={#1},
+  fonttitle=\sffamily\bfseries,
+  boxrule=0.6pt,
+  arc=2mm,
+  left=3mm,
+  right=3mm,
+  top=2mm,
+  bottom=2mm
+}
+
+\newtcolorbox{casebox}[1]{
+  colback=blue!3,
+  colframe=VLABlue,
+  coltitle=VLADark,
+  title={#1},
+  fonttitle=\sffamily\bfseries,
+  boxrule=0.6pt,
+  arc=2mm,
+  left=3mm,
+  right=3mm,
+  top=2mm,
+  bottom=2mm
+}
+
+\newtcolorbox{sourcebox}[1]{
+  colback=teal!3,
+  colframe=VLATeal,
+  coltitle=VLADark,
+  title={#1},
+  fonttitle=\sffamily\bfseries,
+  boxrule=0.6pt,
+  arc=2mm,
+  left=3mm,
+  right=3mm,
+  top=2mm,
+  bottom=2mm
+}
+
+\newtcolorbox{assignmentbox}[1]{
+  colback=gray!5,
+  colframe=VLAMid,
+  coltitle=VLADark,
+  title={#1},
+  fonttitle=\sffamily\bfseries,
+  boxrule=0.5pt,
+  arc=2mm,
+  left=3mm,
+  right=3mm,
+  top=2mm,
+  bottom=2mm
+}
+
+\tikzset{
+  vlablock/.style={
+    draw=VLABlue,
+    rounded corners=2mm,
+    fill=blue!4,
+    align=center,
+    minimum height=9mm,
+    inner xsep=2mm,
+    font=\sffamily\small
+  },
+  vlaarrow/.style={-{Latex[length=2mm]}, thick, draw=VLAMid}
+}
+
+\newcommand{\vla}{\mathrm{VLA}}
+\newcommand{\obs}{\mathbf{o}}
+\newcommand{\act}{\mathbf{a}}
+\newcommand{\Act}{\mathbf{A}}
+\newcommand{\lang}{\ell}
+\newcommand{\hist}{\mathbf{h}}

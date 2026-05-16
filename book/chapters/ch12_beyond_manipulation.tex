@@ -1,0 +1,223 @@
+\chapter{Beyond Manipulation}
+\label{ch:beyond_manipulation}
+
+앞 장들에서는 manipulation을 중심으로 VLA를 설명했다. 이유는 manipulation이 VLA의 핵심 병목인 object grounding, action representation, contact, real-time control, safety를 한꺼번에 드러내기 때문이다. 그러나 VLA의 아이디어는 로봇팔에만 머무르지 않는다. Navigation, autonomous driving, game agents, web/GUI agents, mobile robots, humanoids까지 모두 vision, language, action을 결합한다는 점에서는 같은 계열이다. 이 장의 목표는 응용 영역이 바뀔 때 무엇이 유지되고 무엇이 바뀌는지 정리하는 것이다.
+
+\section{공통 구조}
+
+응용이 달라져도 VLA의 기본 구조는 동일하다.
+
+\begin{equation}
+  \pi_\theta:
+  (o_{1:t}, q, h_{1:t})
+  \mapsto
+  a_{t:t+H-1}.
+\end{equation}
+
+차이는 $o_t$, $q$, $a_t$, reward, safety constraint의 의미이다. Manipulation에서 $a_t$는 end-effector pose 또는 joint command였지만, navigation에서는 waypoint나 velocity command이고, driving에서는 steering/throttle/brake 또는 trajectory이며, game에서는 keyboard/mouse action 또는 discrete skill이다.
+
+\begin{table}[t]
+  \centering
+  \caption{응용 영역별 VLA 구성 요소}
+  \label{tab:beyond_manipulation_domains}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{25mm}p{30mm}p{34mm}X}
+    \toprule
+    영역 & Observation & Action & 주요 constraint \\
+    \midrule
+    Manipulation & RGB-D, proprioception, tactile & pose, gripper, joint, force & contact, collision, grasp stability \\
+    Navigation & egocentric image, map, pose & waypoint, velocity, turn command & obstacle, localization, path feasibility \\
+    Driving & multi-camera, LiDAR, map, route & trajectory, steering, brake & traffic rule, safety distance, comfort \\
+    Games & screen, state, inventory & key, mouse, discrete action & game rule, long-horizon reward \\
+    Humanoid & multi-camera, whole-body state & whole-body trajectory, skill & balance, contact, human safety \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+따라서 VLA를 일반화한다는 말은 단일 architecture를 모든 영역에 그대로 쓰는 것이 아니다. 공통 interface를 유지하면서 domain-specific action parameterization과 safety layer를 바꾸는 것이다.
+
+\section{Navigation VLA}
+
+Navigation에서 언어는 goal과 constraint를 지정한다. ``복도 끝 회의실 앞까지 가라'', ``사람을 피해 엘리베이터 쪽으로 이동하라'', ``빨간 소파 옆에서 멈춰라'' 같은 지시가 예시이다.
+
+\begin{equation}
+  a_t =
+  (\Delta x_t, \Delta y_t, \Delta \psi_t)
+  \quad \text{or} \quad
+  a_t = w_t.
+\end{equation}
+
+$w_t$는 waypoint이다. Manipulation과 비교하면 contact는 적지만, localization, map consistency, dynamic obstacle, long-range goal grounding이 더 중요하다. VLA navigation은 VLM의 semantic grounding을 이용해 ``소파'', ``엘리베이터'', ``창문 근처'' 같은 landmark를 이해할 수 있다.
+
+Navigation의 핵심 문제는 언어-지도 grounding이다.
+
+\begin{equation}
+  q
+  \rightarrow
+  g^\star
+  \in
+  \mathcal{M},
+\end{equation}
+
+$\mathcal{M}$은 metric map, topological map, semantic map일 수 있다. VLA가 장면을 이해해도 robot pose가 틀리면 목표를 찾을 수 없다. 따라서 navigation VLA는 SLAM, localization, mapping과 분리해서 읽으면 안 된다.
+
+\section{Embodied QA와 embodied instruction following}
+
+Embodied QA는 질문에 답하기 위해 환경 안에서 움직인다. 예를 들어 ``부엌에 컵이 몇 개 있는가''라는 질문은 camera image 하나로 답할 수 없고, 탐색이 필요하다.
+
+\begin{equation}
+  a_t
+  =
+  \arg\max_a
+  I(y; o_{t+1} \mid o_{1:t},a,q),
+\end{equation}
+
+여기서 $y$는 답이다. 행동의 목적은 물체를 조작하는 것이 아니라 정보를 얻는 것이다. 따라서 embodied QA에서 좋은 action은 goal에 가까워지는 action이 아니라 uncertainty를 줄이는 action일 수 있다.
+
+이 영역은 9장의 reasoning과 강하게 연결된다. 로봇은 자신이 무엇을 모르는지 판단하고, 어느 위치로 가면 답을 얻을 수 있는지 계획해야 한다. VLA가 단순히 image captioning을 잘한다고 embodied QA를 잘하는 것은 아니다.
+
+\section{Autonomous driving과 VLA}
+
+Driving은 VLA와 유사한 구조를 오래전부터 가지고 있었다. Multi-camera와 LiDAR를 보고, route instruction을 받고, trajectory를 출력한다. 최근에는 language-conditioned driving, VLM-based scene reasoning, instruction following driving agent가 VLA 관점과 연결된다.
+
+\begin{equation}
+  \tau_{t:t+H}
+  =
+  \pi_\theta
+  (I_t^{1:N}, L_t, m_t, q),
+\end{equation}
+
+$I_t^{1:N}$은 여러 camera, $L_t$는 LiDAR, $m_t$는 map 또는 route, $q$는 high-level instruction이다. Driving의 action은 직접 steering일 수도 있지만, 보통 trajectory로 표현하는 것이 안전하다.
+
+Driving에서 safety constraint는 manipulation보다 엄격하다.
+
+\begin{equation}
+  d_{\mathrm{safe}}(t)
+  \ge
+  d_0
+  +
+  T_h v_t.
+\end{equation}
+
+여기서 $d_{\mathrm{safe}}$는 앞차와의 거리, $T_h$는 time headway이다. VLA가 언어와 장면을 잘 이해해도 traffic rule, comfort, liability, rare event safety를 만족해야 한다. 그래서 driving VLA는 end-to-end 행동 생성보다 perception-reasoning-planning stack 안의 한 모듈로 들어갈 가능성이 크다.
+
+\section{Games and interactive agents}
+
+Games는 VLA 연구에 유용한 testbed이다. Minecraft, 3D embodied games, browser/GUI control은 visual observation, language goal, action sequence를 제공한다. 실제 물리 위험은 낮고, long-horizon planning과 exploration을 평가하기 좋다.
+
+\begin{equation}
+  a_t \in
+  \{\mathrm{move}, \mathrm{turn}, \mathrm{click}, \mathrm{use}, \mathrm{craft}, \ldots\}.
+\end{equation}
+
+게임과 GUI agent에서 action은 discrete인 경우가 많다. 따라서 manipulation의 contact control 문제는 줄어들지만, long-horizon credit assignment와 memory 문제가 커진다. ``나무를 캐서 도구를 만들고 집을 지어라'' 같은 목표는 수십 또는 수백 step의 plan을 요구한다.
+
+이 영역의 장점은 scalable evaluation이다. 그러나 실제 로봇으로 바로 이전되는 것은 아니다. Game VLA에서 배운 planning과 memory 구조가 real robot에 유용할 수 있지만, physics, sensing, safety는 다시 검증해야 한다.
+
+\section{Humanoid와 general embodiment}
+
+Humanoid는 VLA의 가장 넓은 응용처럼 보인다. 언어 지시를 이해하고, 걸어가고, 물체를 집고, 사람과 상호작용한다. 그러나 기술적으로는 가장 어려운 문제 중 하나이다. Whole-body control, balance, contact switching, bimanual manipulation, human safety가 모두 필요하다.
+
+\begin{equation}
+  a_t =
+  \left[
+    q_{t+1}^{\mathrm{wholebody}},
+    \dot{q}_{t+1}^{\mathrm{wholebody}},
+    f_t^{\mathrm{contact}}
+  \right].
+\end{equation}
+
+Humanoid VLA에서 high-level language understanding과 low-level motor control을 하나의 모델이 직접 처리하는 것은 비효율적일 수 있다. 더 현실적인 구조는 VLA가 task, subgoal, skill selection을 담당하고, whole-body controller가 balance와 contact를 처리하는 것이다.
+
+\begin{casebox}{Case study: GR00T N1, Helix, Gemini Robotics}
+GR00T N1은 humanoid용 open foundation model로 vision-language module과 diffusion transformer action module을 결합한 dual-system VLA를 제시한다. 이 주장은 humanoid VLA의 중요한 anchor이지만, real-robot trajectories, human videos, synthetic data mixture가 어떤 검증 조건에서 효과를 냈는지 별도로 확인해야 한다. Figure의 Helix는 company report 성격이 강하므로 full-upper-body humanoid control claim을 industrial signal로 읽되 peer-reviewed evidence와 분리한다. Gemini Robotics 1.5는 visual information과 instruction을 motor command로 바꾸는 closed industrial VLA로, Gemini Robotics-ER는 embodied reasoning model로 분리해 읽는다.
+\end{casebox}
+
+\begin{casebox}{Evidence split: open model vs closed industrial model}
+Humanoid와 industrial VLA는 public evidence와 company claim이 섞이기 쉬우므로, 다음처럼 분리해 읽는다.
+
+\vspace{0.5em}
+\begin{tabularx}{\linewidth}{>{\bfseries}p{34mm}X}
+  \toprule
+  구분 & 확인할 내용 \\
+  \midrule
+  Open model evidence & Paper, code, checkpoint, training data summary, benchmark protocol, robot/sim setup이 공개되어 독립 검증이 가능한가? \\
+  Closed industrial evidence & Demo, product page, technical report가 무엇을 보여 주며, model weight, controller, data, safety layer 중 무엇이 비공개인가? \\
+  Action interface & Motor command가 end-effector, joint, whole-body trajectory, skill selection 중 무엇인지 명시되어 있는가? \\
+  Reasoning/action split & Vision-language reasoning module과 motor action module이 분리되어 있는지, 그 분리가 ablation으로 검증되었는가? \\
+  Evidence level & Open arXiv/project evidence는 B, company demo 중심 evidence는 C로 표시하고 같은 benchmark score처럼 비교하지 않는다. \\
+  \bottomrule
+\end{tabularx}
+\end{casebox}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{Claim-source-evidence-caution map for cross-domain and humanoid VLA}
+  \label{tab:ch12_claim_source}
+  \begin{tabularx}{\textwidth}{L{31mm}L{30mm}L{46mm}Y}
+    \toprule
+    Claim & Source & Evidence & Caution \\
+    \midrule
+    Humanoid VLA requires reasoning/action separation & GR00T N1 \citep{grootn1} & Vision-language module plus diffusion transformer action module & Check which components and datasets are open. \\
+    Industrial humanoid VLA is emerging & Helix \citep{helix} & Company report and demo-style evidence & Treat as company claim, not peer-reviewed benchmark evidence. \\
+    Closed VLA stacks need versioned naming & Gemini Robotics 1.5 \citep{geminirobotics} & Official page/report describes instruction and visual information to motor commands & Publicly verifiable evidence is limited. \\
+    Embodied reasoning and action generation are not identical & Gemini Robotics-ER 1.6 \citep{geminiroboticser} & Official page/report frames ER as embodied reasoning & Do not merge ER claims with action policy benchmark claims. \\
+    Open-world generalization is a cross-domain target & \(\pi_0,\pi_{0.5}\) \citep{pi0,pi05} & Flow VLA and heterogeneous co-training evidence & Emerging-front wording is safer than consensus wording. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Generalist policy의 의미}
+
+Generalist VLA는 여러 task와 embodiment에서 동작하는 policy를 뜻한다. 그러나 generalist라는 말은 세 수준으로 나눌 수 있다.
+
+\begin{enumerate}
+  \item 같은 로봇에서 여러 task를 수행한다.
+  \item 여러 로봇에서 비슷한 task를 수행한다.
+  \item 여러 domain에서 서로 다른 action space를 다룬다.
+\end{enumerate}
+
+세 번째가 가장 어렵다. 서로 다른 action space를 하나의 token vocabulary로 묶을 수는 있지만, token의 물리적 의미는 domain마다 다르다.
+
+\begin{equation}
+  a_t^{(d)}
+  =
+  D_d
+  (u_t),
+\end{equation}
+
+$u_t$는 domain-agnostic latent action이고, $D_d$는 domain-specific decoder이다. 이 구조는 generalist backbone과 domain-specific controller를 분리하는 한 방법이다.
+
+\section{Transfer의 조건}
+
+Manipulation에서 배운 것이 navigation이나 driving으로 옮겨가려면 무엇이 transfer되는지 구분해야 한다. Transfer 가능한 것은 언어 이해, visual grounding, scene relation, temporal memory, planning pattern이다. Transfer가 어려운 것은 low-level action dynamics, safety constraint, sensor calibration, reward definition이다.
+
+\begin{equation}
+  \theta
+  =
+  \theta_{\mathrm{shared}}
+  \cup
+  \theta_{\mathrm{domain}}.
+\end{equation}
+
+좋은 multi-domain VLA 연구는 shared parameter가 어떤 능력을 담당하고, domain-specific parameter가 무엇을 담당하는지 ablation으로 보여야 한다. 모든 domain을 하나의 benchmark score로 합치면 해석이 흐려진다.
+
+\section{요약}
+
+VLA는 manipulation을 넘어 navigation, embodied QA, driving, games, humanoid로 확장될 수 있다. 그러나 확장의 핵심은 ``같은 거대 모델을 어디에나 붙인다''가 아니라, vision-language grounding과 action generation의 공통 구조를 유지하면서 domain별 action space, state estimator, controller, safety constraint를 정확히 설계하는 것이다. Manipulation은 VLA의 대표 전장이지만, VLA의 최종 형태는 여러 embodiment가 공유하는 backbone과 domain-specific execution layer의 결합에 가까울 가능성이 크다.
+
+다음 장에서는 2024--2026년 VLA 흐름을 연구 트렌드 맵으로 정리한다. 지금까지 다룬 action representation, fine-tuning, efficiency, manipulation, benchmark, reasoning, world model, safety, embodiment 확장을 하나의 지형도로 묶는다.
+
+\begin{sourcebox}{Key papers}
+\begin{itemize}
+  \item Physical Intelligence et al. (2025), \(\pi_{0.5}\): heterogeneous co-training, semantic prediction, web data를 결합해 open-world generalization을 전면에 놓는다.
+  \item NVIDIA et al. (2025), GR00T N1: humanoid VLA와 dual-system architecture의 핵심 anchor이다.
+  \item Figure AI (2025), Helix company report: industrial humanoid VLA claim을 공개 논문과 구분해 읽는 사례이다.
+  \item Google DeepMind (2025/2026), Gemini Robotics: closed VLA, embodied reasoning, on-device model을 한 stack으로 분류할 수 있다.
+  \item Autonomous driving VLA survey 계열 논문: action space와 safety constraint가 manipulation과 어떻게 달라지는지 확인하기 좋다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Intermediate]}
+GR00T N1, Helix, Gemini Robotics 중 하나를 골라 공개 논문, project/company report, closed product claim을 구분하고, 확인 가능한 evidence와 확인 불가능한 claim을 표로 나누라.
+\end{assignmentbox}

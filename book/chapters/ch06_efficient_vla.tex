@@ -1,0 +1,261 @@
+\chapter{Efficient VLA: 빠르고 작은 VLA 만들기}
+
+\section{장의 목표}
+
+VLA가 실제 로봇 정책이 되려면 성공률뿐 아니라 시간 안에 행동을 내야 한다. 큰 VLM backbone을 쓰는 VLA는 semantic prior가 강하지만, 제어 주기 관점에서는 느릴 수 있다. 로봇은 모델이 생각을 끝낼 때까지 기다려 주지 않는다. 센서 입력, 전처리, 모델 추론, action decoding, safety filter, controller command가 모두 한 loop 안에 들어와야 한다.
+
+이 장은 VLA 효율성을 네 층으로 나누어 다룬다.
+
+\begin{enumerate}
+  \item system-level latency: 전체 제어 loop의 시간 예산
+  \item model-level efficiency: backbone, token 수, expert routing, pruning
+  \item decoding-level efficiency: speculative decoding, action chunking, diffusion step 감소
+  \item deployment-level efficiency: GPU memory, batch size, controller interface
+\end{enumerate}
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[node distance=4mm]
+    \node[vlablock, minimum width=24mm] (sensor) {Sensor\\\(\tau_s\)};
+    \node[vlablock, minimum width=24mm, right=of sensor] (prep) {Preprocess\\\(\tau_p\)};
+    \node[vlablock, minimum width=24mm, right=of prep] (model) {Model\\\(\tau_m\)};
+    \node[vlablock, minimum width=24mm, right=of model] (decode) {Decode\\\(\tau_d\)};
+    \node[vlablock, minimum width=24mm, right=of decode] (control) {Control\\\(\tau_c\)};
+    \draw[vlaarrow] (sensor) -- (prep);
+    \draw[vlaarrow] (prep) -- (model);
+    \draw[vlaarrow] (model) -- (decode);
+    \draw[vlaarrow] (decode) -- (control);
+    \node[below=7mm of model, font=\sffamily\small] {\(\tau_s+\tau_p+\tau_m+\tau_d+\tau_c \le T_{\mathrm{loop}}\)};
+  \end{tikzpicture}
+  \caption{Author-created schematic. Latency budget for VLA deployment. 효율성 주장은 model forward time만이 아니라 sensor, preprocessing, decoding, safety/controller overhead를 포함해 평가해야 한다.}
+  \label{fig:latency_budget}
+\end{figure}
+
+\section{Latency budget}
+
+VLA의 효율성은 단순한 FPS가 아니다. 실제 제어 loop의 시간 예산은 다음과 같다.
+
+\begin{equation}
+  \tau_{\mathrm{loop}}
+  =
+  \tau_{\mathrm{sense}}
+  +
+  \tau_{\mathrm{pre}}
+  +
+  \tau_{\mathrm{model}}
+  +
+  \tau_{\mathrm{decode}}
+  +
+  \tau_{\mathrm{safe}}
+  +
+  \tau_{\mathrm{ctrl}}.
+  \label{eq:eff_latency_budget}
+\end{equation}
+
+Real-time VLA를 주장하려면 $\tau_{\mathrm{loop}}$가 controller 요구 주기보다 작아야 한다.
+
+\begin{equation}
+  \tau_{\mathrm{loop}} \le \frac{1}{f_{\mathrm{ctrl}}}.
+\end{equation}
+
+예를 들어 10 Hz closed-loop policy를 원하면 전체 loop가 100 ms 안에 끝나야 한다. 모델 forward pass만 80 ms라면 sensor와 safety filter를 포함했을 때 이미 위험하다. 따라서 효율성 논문은 $\tau_{\mathrm{model}}$뿐 아니라 end-to-end latency를 보고해야 한다.
+
+\section{Token 수가 왜 중요한가}
+
+Transformer 기반 VLA에서 계산량은 token 수에 크게 의존한다. self-attention의 기본 계산량은 token 수 $n$에 대해 대략 $O(n^2)$이다.
+
+\begin{equation}
+  C_{\mathrm{attn}} \propto n^2 d.
+\end{equation}
+
+VLA는 이미지 patch token, 언어 token, state token, action token을 모두 다룰 수 있다. Multi-view image를 쓰면 visual token 수가 급격히 늘어난다. 따라서 token pruning이나 token merging은 단순 최적화가 아니라 VLA 실시간성의 핵심 전략이다.
+
+중요한 점은 모든 token이 행동에 똑같이 중요하지 않다는 것이다. ``빨간 컵을 잡아라''라는 명령에서 배경, 벽, 관련 없는 객체 token은 action 결정에 덜 중요할 수 있다. 효율적 VLA는 task-relevant token을 남기고 나머지 계산을 줄이려 한다.
+
+\section{Sparsification과 routing}
+
+Sparsification은 계산에 참여하는 token, channel, layer, expert를 줄이는 방법이다. 가장 단순하게는 mask $m_i \in \{0,1\}$를 두고 token representation $h_i$를 선택한다.
+
+\begin{equation}
+  \tilde{h}_i = m_i h_i.
+\end{equation}
+
+선택된 token 수가 $n_s = \sum_i m_i$이면 attention cost는 $n_s^2$에 비례한다. 만약 $n_s \ll n$이면 계산량이 크게 줄 수 있다. 그러나 token을 잘못 버리면 목표 객체나 중요한 spatial relation을 잃는다. 따라서 sparsification은 success rate와 함께 평가해야 한다.
+
+Routing은 입력 조건에 따라 expert나 path를 선택한다.
+
+\begin{equation}
+  y =
+  \sum_{e=1}^{E}
+  g_e(x) F_e(x),
+\end{equation}
+
+여기서 $g_e(x)$는 routing weight이고 $F_e$는 expert이다. CogVLA류 논문은 cognition-aligned routing과 sparsification을 통해 필요한 계산만 쓰려는 방향으로 볼 수 있다. 핵심 질문은 routing이 단순히 빠른가가 아니라, task-relevant reasoning path를 실제로 선택하는가이다.
+
+\section{Adapter로 작게 맞추기}
+
+VLA-Adapter류 접근은 큰 backbone을 그대로 두고 작은 모듈만 학습한다. 학습 비용을 줄이는 효과가 크지만, inference 비용은 adapter 구조에 따라 달라진다. Adapter가 모든 layer에 들어가면 parameter 수는 작아도 latency는 늘 수 있다.
+
+따라서 adapter 효율성을 평가할 때는 다음 네 지표를 분리해야 한다.
+
+\begin{enumerate}
+  \item trainable parameter ratio
+  \item training GPU memory
+  \item inference latency
+  \item task success rate
+\end{enumerate}
+
+작은 adapter가 좋다는 주장은 이 네 항목을 함께 보여야 닫힌다. parameter-efficient가 반드시 deployment-efficient는 아니다.
+
+\section{Speculative decoding}
+
+Speculative decoding은 작은 draft model이 후보 action token을 먼저 만들고, 큰 target model이 이를 검증하는 방식이다. 언어 모델에서 쓰이던 아이디어를 VLA action decoding에 적용할 수 있다.
+
+작은 모델 $q$가 후보 sequence $\tilde{u}_{1:L}$를 생성하고, 큰 모델 $p$가 acceptance를 결정한다고 하자.
+
+\begin{equation}
+  \tilde{u}_{1:L} \sim q(u_{1:L}\mid c_t),
+  \qquad
+  a_\ell =
+  \min\left(1,
+  \frac{p(\tilde{u}_\ell \mid \tilde{u}_{<\ell},c_t)}
+       {q(\tilde{u}_\ell \mid \tilde{u}_{<\ell},c_t)}
+  \right).
+\end{equation}
+
+VLA에서 문제는 relaxed acceptance이다. 언어 token은 틀리면 문장이 조금 이상해질 수 있지만, action token은 작은 차이가 물리적으로 큰 실패를 만들 수 있다. 따라서 Spec-VLA류 접근은 token-level acceptance뿐 아니라 continuous action error와 task success를 함께 봐야 한다.
+
+\section{Diffusion step 줄이기}
+
+Diffusion action decoder는 표현력이 좋지만 step 수가 많으면 느리다. $K$ step denoising을 하면 대략 $K$번의 model call이 필요하다.
+
+\begin{equation}
+  \tau_{\mathrm{diff}}
+  \approx
+  K \tau_{\mathrm{denoise}}.
+\end{equation}
+
+이를 줄이는 방법은 세 가지이다.
+
+\begin{enumerate}
+  \item denoising step 수를 줄인다.
+  \item consistency distillation으로 one-step 또는 few-step generation을 만든다.
+  \item flow matching으로 더 직접적인 trajectory mapping을 학습한다.
+\end{enumerate}
+
+FreqPolicy나 efficient flow-based policy 계열은 이 문제의식과 연결된다. 좋은 논문은 step 수를 줄였을 때 success rate가 얼마나 떨어지는지, 그리고 real-time loop를 만족하는지 보여야 한다.
+
+\section{Action chunking과 효율성}
+
+4장에서 action chunking은 행동 표현 관점에서 다루었다. 여기서는 효율성 관점에서 본다. $H$ step action chunk를 생성하면 모델 호출 빈도는 줄어든다.
+
+\begin{equation}
+  N_{\mathrm{calls}}
+  =
+  \left\lceil
+  \frac{T}{H}
+  \right\rceil.
+\end{equation}
+
+그러나 chunk를 길게 만들면 policy가 현재 관측을 덜 자주 반영한다. 따라서 efficient VLA는 단순히 큰 $H$를 쓰는 것이 아니라, task phase에 따라 adaptive chunking을 고려할 수 있다. 접근 구간에서는 큰 chunk를 쓰고, 접촉 구간에서는 작은 chunk를 쓰는 방식이 더 합리적일 수 있다.
+
+\section{메모리와 quantization}
+
+실제 배포에서는 GPU memory도 중요하다. 모델 parameter, activation, KV cache, visual token buffer가 모두 memory를 사용한다. 특히 autoregressive action token decoding에서는 KV cache가 길이에 따라 증가한다.
+
+\begin{equation}
+  M_{\mathrm{total}}
+  =
+  M_{\mathrm{param}}
+  +
+  M_{\mathrm{act}}
+  +
+  M_{\mathrm{cache}}
+  +
+  M_{\mathrm{buffer}}.
+\end{equation}
+
+Quantization은 $M_{\mathrm{param}}$를 줄이는 대표 방법이다. 그러나 로봇 정책에서 quantization은 action accuracy에 영향을 줄 수 있다. 언어 응답에서는 약간의 logit 변화가 큰 문제가 아닐 수 있지만, 로봇 action head에서는 작은 변화가 trajectory를 흔들 수 있다. 따라서 model quantization은 action error와 success rate로 검증해야 한다.
+
+\section{효율성 평가표}
+
+\begin{table}[t]
+  \centering
+  \caption{Efficient VLA 평가 기준}
+  \label{tab:efficient_vla_eval}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{32mm}X}
+    \toprule
+    항목 & 확인할 내용 \\
+    \midrule
+    End-to-end latency & sensor, preprocessing, model, decoding, safety, controller 포함 여부 \\
+    Model latency & backbone forward, action head, decoding step 별 시간 \\
+    Success-latency curve & 같은 성공률에서 더 빠른지, 같은 latency에서 더 성공적인지 \\
+    Memory & parameter, activation, cache, buffer 포함 여부 \\
+    Ablation & token 수, chunk length, expert 수, diffusion step 수 변화 \\
+    Hardware & GPU/CPU 종류, batch size, precision, robot control frequency \\
+    Failure mode & 빨라지면서 어떤 실패가 늘었는지 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+효율성 논문에서 가장 중요한 것은 trade-off curve이다. 단일 점으로 ``빠르고 좋다''고 주장하면 부족하다. 성공률과 latency를 함께 그려야 한다.
+
+\begin{table}[t]
+  \centering
+  \caption{End-to-end latency measurement template}
+  \label{tab:latency_measurement_template}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{36mm}p{22mm}X}
+    \toprule
+    Stage & Time (ms) & Notes \\
+    \midrule
+    Camera read & & resolution, view count, synchronization \\
+    Preprocess & & resize, crop, normalize, tokenization \\
+    VLA forward & & precision, GPU/CPU, batch size, visual token count \\
+    Action decoding & & autoregressive steps, diffusion/flow steps, chunk length \\
+    Safety filter & & collision check, workspace limit, joint limit \\
+    Controller dispatch & & ROS/control stack, network and actuator delay \\
+    Total & & compare with target loop rate \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{요약}
+
+Efficient VLA는 모델을 작게 만드는 문제가 아니라, 로봇 제어 loop 안에 VLA를 넣는 문제이다. Token pruning, sparsification, routing, adapter, speculative decoding, diffusion step reduction, action chunking은 모두 latency budget을 맞추기 위한 서로 다른 도구이다. 그러나 속도만 빨라지면 충분하지 않다. 효율성 연구는 success rate, latency, memory, failure mode를 함께 보고해야 한다.
+
+다음 장에서는 VLA가 가장 많이 검증되는 응용 영역인 manipulation을 다룬다. Efficient VLA가 시간 제약의 문제라면, manipulation은 물리 접촉과 행동 안정성의 문제이다.
+
+\begin{casebox}{Case study: SmolVLA와 real-time action policies}
+SmolVLA는 billion-scale VLA가 아닌 compact VLA의 가능성을 보여 주는 사례이다. 논문은 consumer GPU/CPU deployment를 목표로 single-GPU training, asynchronous inference stack, chunked action generation을 제시한다. 다만 이 주장을 검증할 때는 task coverage, hardware setting, benchmark comparability를 함께 확인해야 하며, 작은 모델이 좋다는 결론보다 perception/action prediction과 execution을 decouple하는 system design 문제로 읽는 편이 안전하다. Real-time action chunking flow policy 계열은 같은 질문을 flow/chunk representation 관점에서 다룬다.
+\end{casebox}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{Claim-source-evidence-caution map for efficient VLA}
+  \label{tab:ch6_claim_source}
+  \begin{tabularx}{\textwidth}{L{31mm}L{28mm}L{48mm}Y}
+    \toprule
+    Claim & Source & Evidence & Caution \\
+    \midrule
+    Speed improvement must preserve success & OpenVLA-OFT \citep{openvlaoft} & Success and throughput are reported together & Hardware and decoding protocol must be comparable. \\
+    Small VLA is a system design question & SmolVLA \citep{smolvla} & Compact model, asynchronous inference, consumer hardware claims & Task coverage and benchmark comparability must be checked. \\
+    Tokenization affects both training and inference cost & FAST \citep{fast} & DCT-based action compression and tokenizer efficiency & Compression gain must be evaluated against physical execution error. \\
+    Flow policies trade sampling cost and control quality & \(\pi_0\) \citep{pi0} & Flow matching architecture for general robot control & Real-time claims depend on action horizon, hardware, and controller interface. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{sourcebox}{Key papers}
+\begin{itemize}
+  \item Kim, Finn, and Liang (2025), OpenVLA-OFT: throughput 26\(\times\) 개선과 success 개선을 함께 보고해 success-latency curve 논의의 좋은 사례이다.
+  \item Shukor et al. (2025), SmolVLA, arXiv preprint: compact VLA, consumer hardware, asynchronous inference stack을 효율성 장의 중심 사례로 제공한다.
+  \item Black et al. (2024/2026), \(\pi_0\): flow matching architecture와 dexterous control을 연결하는 general robot control anchor이다.
+  \item Pertsch et al. (2025), FAST: tokenization을 통해 autoregressive VLA의 학습/추론 비용을 줄이는 접근이다.
+  \item CogVLA 계열 sparsification 논문: instruction-conditioned routing으로 계산량과 성능을 조절하는 model/system 교차 사례이다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Intermediate]}
+SmolVLA와 OpenVLA-OFT를 비교해 효율성 개선이 model size, decoding, action chunking, asynchronous system 중 어디에서 오는지 분해하라.
+\end{assignmentbox}

@@ -1,0 +1,29 @@
+\chapter{Glossary}
+\label{app:glossary}
+
+이 부록은 본문에서 반복되는 용어를 고정한다. 한국어 번역이 어색한 용어는 영어를 기본 표기로 유지하고, 처음 등장할 때만 짧게 설명한다.
+
+\begin{table}[h]
+  \centering
+  \caption{Core terminology for the VLA mini book.}
+  \label{tab:glossary}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{38mm}X}
+    \toprule
+    Term & Definition \\
+    \midrule
+    VLA & Vision, language, robot observation/history를 조건으로 실제 action 또는 action chunk를 출력하는 language-conditioned closed-loop policy. \\
+    fine-tuning & Pretrained VLA를 특정 robot, task, action space, controller interface에 맞추는 supervised adaptation. \\
+    post-training & fine-tuning 이후 success feedback, verifier, preference, correction signal, simulator feedback으로 실행 품질을 보정하는 절차. \\
+    action space & VLA가 출력하는 행동 변수의 공간; end-effector delta, joint velocity, gripper command, token, trajectory 등이 포함된다. \\
+    action chunk & 한 번의 model inference에서 생성되는 여러 timestep의 action sequence. \\
+    action chunking & action chunk를 사용해 model call frequency를 낮추고 temporal consistency를 높이려는 기법. \\
+    controller interface & VLA output이 low-level controller로 전달될 때의 coordinate frame, frequency, normalization, constraint, safety filter 계약. \\
+    latency budget & sensing, preprocessing, model inference, decoding, safety filter, controller dispatch를 모두 포함한 control-loop 시간 예산. \\
+    source status & paper/source의 공개와 검증 성격; peer-reviewed, arXiv, project page, company report, closed model 등으로 구분한다. \\
+    evidence type & source가 제공하는 검증 유형; offline, simulation, real robot, multi-site, company demo 등으로 구분한다. \\
+    engineering utility & 실제 논문 objective가 아니라 success, latency, memory, risk를 비교하기 위한 개념적 판단 함수. \\
+    diagnostic metric & benchmark나 failure analysis를 위해 만든 측정치; training loss와 다를 수 있다. \\
+    emerging front & 아직 합의된 trend가 아니라 2025--2026년에 빠르게 관측되는 연구 전선. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}

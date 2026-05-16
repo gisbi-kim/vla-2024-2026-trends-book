@@ -1,0 +1,270 @@
+\chapter{Robustness and Safety}
+\label{ch:robustness_safety}
+
+10장에서는 world model이 행동 후보를 미리 평가하는 도구가 될 수 있다고 했다. 그러나 실제 배포에서는 예측 모델도 틀리고, perception도 흔들리고, 사용자의 지시도 모호하며, 환경은 training data와 다르다. 따라서 VLA를 연구용 demonstration에서 실제 robot system으로 옮기려면 평균 성공률보다 failure mode와 safety envelope가 더 중요해진다.
+
+\section{Robustness의 정의}
+
+Robustness는 distribution이 바뀌어도 성능이 유지되는 정도이다. 이를 간단히 쓰면 다음과 같다.
+
+\begin{equation}
+  \Delta J
+  =
+  J_{\mathcal{D}_{\mathrm{train}}}(\pi_\theta)
+  -
+  J_{\mathcal{D}_{\mathrm{test}}}(\pi_\theta).
+\end{equation}
+
+$\Delta J$가 작을수록 robust하다. 하지만 VLA에서 test distribution은 하나가 아니다. 물체, 조명, 배경, 카메라 위치, 언어 표현, task composition, robot calibration, human intervention이 모두 바뀔 수 있다.
+
+\begin{equation}
+  \mathcal{D}_{\mathrm{test}}
+  =
+  \mathcal{D}
+  (
+    o,
+    q,
+    a,
+    e,
+    r,
+    u
+  ),
+\end{equation}
+
+$o$는 관측, $q$는 지시, $a$는 action, $e$는 environment, $r$은 robot embodiment, $u$는 user behavior이다. Robustness 논문은 이 중 어느 축을 흔들었는지 명확히 해야 한다.
+
+\section{Failure taxonomy}
+
+VLA failure는 하나의 ``실패''로 묶으면 분석이 불가능하다. 최소한 다음 계층으로 나누어야 한다.
+
+\begin{table}[t]
+  \centering
+  \caption{VLA failure mode 분류}
+  \label{tab:vla_failure_taxonomy}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{32mm}X}
+    \toprule
+    Failure 유형 & 설명 \\
+    \midrule
+    Perception failure & 물체, pose, depth, scene relation을 잘못 인식한다 \\
+    Language failure & 지시의 대상, 순서, 제약, 금지를 잘못 해석한다 \\
+    Grounding failure & 언어 대상과 실제 장면의 물체를 잘못 연결한다 \\
+    Planning failure & subgoal 순서, precondition, constraint를 잘못 설정한다 \\
+    Control failure & 올바른 계획이 있어도 trajectory, grasp, force 제어가 실패한다 \\
+    Contact failure & 미끄러짐, 충돌, 과도한 힘, 불안정 grasp가 발생한다 \\
+    Recovery failure & 실패를 감지하지 못하거나 같은 실패를 반복한다 \\
+    Safety failure & 사람, 로봇, 환경, 물체에 위험한 상태를 만든다 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+이 taxonomy는 앞 장들과 연결된다. 7장의 manipulation은 contact failure를 강조했고, 8장은 benchmark가 failure를 얼마나 잘 분리하는지 물었으며, 9장은 reasoning과 recovery failure를 다루었고, 10장은 world model error가 planning과 safety failure로 이어질 수 있음을 보였다.
+
+\section{OOD detection}
+
+Out-of-distribution(OOD) 상황에서 VLA는 자신감 있게 틀릴 수 있다. 로봇에서는 이것이 위험하다. OOD score는 관측 또는 hidden representation이 training distribution에서 얼마나 벗어났는지 나타낸다.
+
+\begin{equation}
+  d_{\mathrm{OOD}}(o_t)
+  =
+  \min_{z_i \in \mathcal{Z}_{\mathrm{train}}}
+  \| e_\psi(o_t) - z_i \|_2.
+\end{equation}
+
+또는 policy uncertainty를 사용할 수 있다.
+
+\begin{equation}
+  U(a_t)
+  =
+  -\sum_a
+  p_\theta(a \mid o_t,q)
+  \log
+  p_\theta(a \mid o_t,q).
+\end{equation}
+
+Continuous action에서는 ensemble disagreement나 diffusion sample variance를 쓸 수 있다. 중요한 것은 OOD를 감지한 뒤의 행동이다. 감지만 하고 계속 움직이면 의미가 없다. Threshold를 넘으면 속도를 줄이거나, 재관측하거나, human confirmation을 요청하거나, safe pose로 돌아가야 한다.
+
+\section{Safety envelope}
+
+Safety는 모델의 선의에 맡길 수 없다. VLA 위에는 명시적 safety envelope가 필요하다.
+
+\begin{equation}
+  a_t^{\mathrm{exec}}
+  =
+  \Pi_{\mathcal{S}}
+  \left(
+    a_t^{\mathrm{VLA}}
+  \right),
+\end{equation}
+
+$\Pi_{\mathcal{S}}$는 action을 안전 집합 $\mathcal{S}$ 안으로 projection하는 operator이다. 안전 집합은 joint limit, velocity limit, force limit, collision-free workspace, forbidden region, human distance constraint를 포함한다.
+
+\begin{equation}
+  \mathcal{S}
+  =
+  \{a:
+  c_i(s_t,a) \le 0,
+  \quad i=1,\ldots,m
+  \}.
+\end{equation}
+
+이 구조는 VLA를 약하게 만드는 것이 아니라 실제 시스템에 넣기 위한 조건이다. End-to-end policy가 아무리 강해도 hardware limit과 human safety rule을 위반하면 배포할 수 없다.
+
+\section{Calibration}
+
+VLA는 confidence를 출력할 수 있지만, confidence가 실제 성공 확률과 맞는지는 별개이다. Calibration은 예측 확률과 경험적 성공률의 일치 정도이다.
+
+\begin{equation}
+  \Pr(\mathrm{success} \mid \hat{p}=p)
+  \approx
+  p.
+\end{equation}
+
+Expected calibration error(ECE)는 다음처럼 쓸 수 있다.
+
+\begin{equation}
+  \mathrm{ECE}
+  =
+  \sum_{b=1}^{B}
+  \frac{|S_b|}{N}
+  \left|
+    \mathrm{acc}(S_b)
+    -
+    \mathrm{conf}(S_b)
+  \right|.
+\end{equation}
+
+Robot VLA에서 calibration은 중요하다. 모델이 90\% 성공한다고 생각하지만 실제로 50\%만 성공한다면, human handoff나 safety slowdown을 잘못 결정한다. 따라서 success predictor, verifier, reward model은 calibration curve를 보고해야 한다.
+
+\section{Adversarial and ambiguous instructions}
+
+VLA는 언어를 입력으로 받으므로 instruction safety가 필요하다. 위험한 지시, 모순된 지시, 애매한 지시, task 범위를 벗어난 지시를 구분해야 한다.
+
+\begin{equation}
+  q
+  \rightarrow
+  y
+  \in
+  \{
+    \mathrm{execute},
+    \mathrm{clarify},
+    \mathrm{refuse},
+    \mathrm{handoff}
+  \}.
+\end{equation}
+
+예를 들어 ``칼을 사람 쪽으로 밀어라''는 refuse 또는 handoff가 필요하다. ``저것을 치워라''는 clarify가 필요할 수 있다. ``컵을 접시에 넣고 컵을 그대로 두어라''처럼 모순된 지시는 plan 생성 전에 감지해야 한다.
+
+여기서 language safety와 physical safety는 다르다. 언어상 무해한 지시도 현재 장면에서는 위험할 수 있다. ``컵을 들어라''는 말은 일반적으로 안전하지만, 컵이 뜨겁거나 깨져 있거나 사람 손 옆에 있으면 unsafe할 수 있다. 따라서 instruction filter는 scene-aware해야 한다.
+
+\section{Human intervention}
+
+실제 로봇 시스템은 완전 자율이 아니라 human intervention을 포함할 수 있다. Intervention은 실패가 아니라 안전 설계의 일부이다.
+
+\begin{equation}
+  \pi(a_t \mid o_t,q)
+  =
+  \begin{cases}
+    \pi_{\mathrm{VLA}}(a_t \mid o_t,q), & U_t < \tau, \\
+    \pi_{\mathrm{assist}}(a_t \mid o_t,q,h), & U_t \ge \tau.
+  \end{cases}
+\end{equation}
+
+$\pi_{\mathrm{assist}}$는 사람이 직접 조종하거나, 선택지를 승인하거나, 지시를 수정하는 interface일 수 있다. VLA benchmark가 human intervention count를 보고하면 실용성이 더 잘 드러난다.
+
+Intervention data는 학습에도 쓸 수 있다. 실패 직전의 state와 human correction은 hard negative와 recovery demonstration을 제공한다. 따라서 robust VLA 연구는 실패를 숨기기보다 실패를 수집하고 재학습하는 loop를 설계해야 한다.
+
+\section{Red teaming for robots}
+
+LLM에서 red teaming은 모델의 취약 지시를 찾는다. VLA에서는 red teaming이 더 넓다. 언어 지시, 장면 구성, 물체 속성, 조명, 센서 가림, 사람이 끼어드는 상황, hardware fault를 포함한다.
+
+\begin{table}[t]
+  \centering
+  \caption{VLA red-team 축}
+  \label{tab:vla_redteam}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{30mm}X}
+    \toprule
+    축 & 예시 \\
+    \midrule
+    Language & 모순 지시, 금지 행동 유도, ambiguous reference \\
+    Vision & 가림, 반사, 비슷한 물체, 조명 변화, motion blur \\
+    Geometry & 좁은 공간, reachability 한계, clutter, thin object \\
+    Contact & 미끄러운 물체, 무거운 물체, deformable object, fragile object \\
+    Human & 손 끼어들기, instruction 변경, 협업자 위치 변화 \\
+    System & latency spike, calibration drift, gripper fault, sensor dropout \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Red-team 결과는 단순 실패 영상 모음이 아니라 taxonomy와 mitigation으로 이어져야 한다. 어떤 failure가 safety envelope로 막히는지, 어떤 failure가 dataset 추가로 줄어드는지, 어떤 failure가 architecture 변경을 요구하는지 구분해야 한다.
+
+\section{Robustness 평가 설계}
+
+Robustness benchmark는 평균 success만 보고하면 부족하다. Perturbation 축별 성능 곡선을 보여야 한다.
+
+\begin{equation}
+  J(\alpha)
+  =
+  \mathbb{E}
+  \left[
+    R(\tau)
+    \mid
+    \mathrm{perturbation\ level}=\alpha
+  \right].
+\end{equation}
+
+예를 들어 조명 변화 강도, object clutter 수, language paraphrase 정도, action latency, camera noise를 $\alpha$로 둘 수 있다. Robust model은 $\alpha$가 증가할 때 성능이 천천히 떨어진다.
+
+또한 safety metric은 success와 별도로 보고해야 한다.
+
+\begin{equation}
+  \mathrm{Risk}
+  =
+  w_c \mathrm{Collision}
+  +
+  w_f \mathrm{ForceViolation}
+  +
+  w_h \mathrm{HumanProximity}
+  +
+  w_o \mathrm{ObjectDamage}.
+\end{equation}
+
+성공률이 높은 모델이라도 risk가 높으면 좋은 모델이 아니다. Robot policy 평가는 reward maximization이 아니라 constrained optimization에 가깝다.
+
+\begin{casebox}{Deployment readiness checklist}
+VLA 논문이 실제 배포 가능성을 주장한다면, 성공률 표와 별도로 다음 checklist를 채워야 한다.
+
+\vspace{0.5em}
+\begin{tabularx}{\linewidth}{>{\bfseries}p{27mm}X}
+  \toprule
+  항목 & 질문 \\
+  \midrule
+  Latency & End-to-end loop latency를 sensor, preprocessing, model, decoding, safety filter, controller dispatch까지 포함해 측정했는가? \\
+  Safety & Joint, velocity, force, collision, workspace envelope가 있고 VLA output이 그 안으로 projection되는가? \\
+  OOD & OOD instruction, unseen object, changed scene, sensor dropout에서 confidence 있게 움직이지 않고 stop, clarify, handoff를 선택할 수 있는가? \\
+  Recovery & 실패 후 같은 action을 반복하지 않고 diagnosis에 따라 재관측, pose 변경, regrasp, safe retreat를 수행하는가? \\
+  Intervention & Human handoff 기준, timeout 기준, unsafe instruction refusal 기준이 명시되어 있는가? \\
+  Logging & Failure trajectory, intervention, OOD trigger, safety-filter override가 저장되어 post-training data로 돌아가는가? \\
+  Audit & Model claim, controller contribution, safety layer contribution, benchmark protocol effect를 ablation으로 분리했는가? \\
+  \bottomrule
+\end{tabularx}
+\end{casebox}
+
+\section{요약}
+
+VLA의 robustness와 safety는 모델 크기를 키우면 자동으로 해결되는 문제가 아니다. Failure taxonomy, OOD detection, safety envelope, calibration, instruction safety, human intervention, red teaming이 함께 필요하다. 연구 논문을 읽을 때는 평균 success rate보다 어떤 실패가 남았고, 그 실패가 safety-critical한지, 논문이 mitigation을 실제로 검증했는지를 봐야 한다.
+
+다음 장에서는 manipulation을 넘어 VLA가 어디까지 확장될 수 있는지 살핀다. Navigation, driving, games, general embodiment는 같은 VLA 원리를 쓰지만 observation, action, safety constraint가 크게 다르다.
+
+\begin{sourcebox}{Key papers}
+\begin{itemize}
+  \item OpenVLA (2024): open model의 fine-tuning과 quantization이 success를 해치지 않는지 확인하는 robustness anchor이다.
+  \item OpenVLA-OFT (2025): success, throughput, real-world ALOHA evaluation을 함께 보고해 deployment risk를 토론하기 좋다.
+  \item Gemini Robotics (2025/2026), Google DeepMind page/report: VLA, embodied reasoning, on-device variant, safety governance를 closed industrial stack으로 분류할 수 있다.
+  \item GR00T N1 (2025), NVIDIA arXiv preprint: humanoid VLA에서 real-time motor action과 simulation benchmark를 함께 다루는 safety-relevant 사례이다.
+  \item Driving VLA survey 계열 논문: manipulation보다 safety envelope와 intervention cost가 훨씬 큰 domain transfer 사례로 읽는다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Advanced]}
+VLA 논문 하나를 골라 성공률 표와 별도로 collision, force violation, OOD instruction, human intervention, latency timeout을 포함하는 safety table을 새로 설계하라.
+\end{assignmentbox}

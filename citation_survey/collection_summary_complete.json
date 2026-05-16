@@ -1,0 +1,278 @@
+{
+  "target_paper": "Fine-Tuning Vision-Language-Action Models: Optimizing Speed and Success",
+  "target_cites_id": "14511679643312711139",
+  "expected_google_scholar_count_seen_on_search_page": 439,
+  "raw_rows": 439,
+  "deduped_rows": 439,
+  "pages": [
+    {
+      "start": 0,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=0",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 10,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=10",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 20,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=20",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 30,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=30",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 40,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=40",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 50,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=50",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 60,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=60",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 70,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=70",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 80,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=80",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 90,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=90",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 100,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=100",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 110,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=110",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 120,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=120",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 130,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=130",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 140,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=140",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 150,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=150",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 160,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=160",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 170,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=170",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 180,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=180",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 190,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=190",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 200,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=200",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 210,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=210",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 220,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=220",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 230,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=230",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 240,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=240",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 250,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0%2C5&hl=ko&start=250",
+      "count": 10,
+      "method": "direct request before CAPTCHA"
+    },
+    {
+      "start": 260,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=260",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 270,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=270",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 280,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=280",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 290,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=290",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 300,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=300",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 310,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=310",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 320,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=320",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 330,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=330",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 340,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=340",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 350,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=350",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 360,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=360",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 370,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=370",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 380,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=380",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 390,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=390",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 400,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=400",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 410,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=410",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 420,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=420",
+      "count": 10,
+      "method": "Chrome extension GUI session"
+    },
+    {
+      "start": 430,
+      "url": "https://scholar.google.com/scholar?cites=14511679643312711139&as_sdt=2005&sciodt=0,5&hl=ko&start=430",
+      "count": 9,
+      "method": "Chrome extension GUI session"
+    }
+  ],
+  "blocked": null,
+  "notes": [
+    "Rows 1-260 were collected before the direct-request Google Scholar CAPTCHA block.",
+    "Rows 261-439 were collected from the user's connected Chrome GUI session, where the Scholar pages were visible without CAPTCHA."
+  ]
+}

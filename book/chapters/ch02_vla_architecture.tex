@@ -1,0 +1,401 @@
+\chapter{VLA의 기본 구조}
+
+\section{장의 목표}
+
+1장은 VLA를 언어 조건부 폐루프 정책으로 정의했다. 2장의 목표는 그 정책이 실제 시스템에서 어떤 모듈로 구성되는지 분해하는 것이다. VLA 논문은 모델명을 앞세우는 경우가 많지만, 공학적으로 중요한 것은 모델명이 아니라 interface이다. 입력은 무엇인가, 출력은 무엇인가, action space는 어떻게 정의되는가, 학습 loss는 무엇인가, inference loop는 어느 주기로 돌아가는가가 먼저 정리되어야 한다.
+
+이 장에서는 VLA를 다음 여섯 구성요소로 나눈다.
+
+\begin{enumerate}
+  \item 관측 인코더: 이미지, 비디오, proprioception, force, tactile signal을 표현으로 바꾼다.
+  \item 언어 인코더: 자연어 지시를 task condition 또는 goal representation으로 바꾼다.
+  \item 멀티모달 결합부: 시각, 언어, 로봇 상태를 하나의 context로 통합한다.
+  \item 행동 표현부: continuous action, action token, action chunk, trajectory를 정의한다.
+  \item 정책 head: context로부터 행동 또는 행동 분포를 생성한다.
+  \item 실행 loop: 센서 입력, 모델 추론, safety filter, controller command를 시간적으로 연결한다.
+\end{enumerate}
+
+\begin{conceptbox}{이 장의 관점}
+VLA 구조를 읽을 때는 transformer block 수나 parameter 수보다 먼저 ``어떤 변수에서 어떤 변수로 가는 함수인가''를 확인해야 한다. 같은 VLA라는 이름을 써도 high-level planner, visuomotor policy, diffusion action decoder, benchmark evaluator는 서로 다른 시스템이다.
+\end{conceptbox}
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[node distance=3mm, transform shape, scale=0.86]
+    \node[vlablock, minimum width=23mm] (obs) {Observation\\RGB-D, proprioception};
+    \node[vlablock, minimum width=20mm, right=of obs] (vlm) {VLM/VLA\\backbone};
+    \node[vlablock, minimum width=22mm, right=of vlm] (head) {Action head\\token, chunk, flow};
+    \node[vlablock, minimum width=22mm, right=of head] (safe) {Safety filter\\constraints};
+    \node[vlablock, minimum width=21mm, right=of safe] (ctrl) {Controller\\robot command};
+    \draw[vlaarrow] (obs) -- (vlm);
+    \draw[vlaarrow] (vlm) -- (head);
+    \draw[vlaarrow] (head) -- (safe);
+    \draw[vlaarrow] (safe) -- (ctrl);
+    \draw[vlaarrow] (ctrl.south) .. controls +(0,-14mm) and +(0,-14mm) .. node[below,font=\sffamily\small]{closed-loop feedback} (obs.south);
+  \end{tikzpicture}
+  \caption{Author-created schematic. VLA system stack. 공개용 원고에서는 VLA를 backbone 하나가 아니라 observation, action head, safety filter, controller interface가 묶인 closed-loop system으로 읽는다.}
+  \label{fig:vla_system_stack}
+\end{figure}
+
+\section{표준 표기법}
+
+시점 $t$에서 로봇이 받는 관측을 다음과 같이 쓴다.
+
+\begin{equation}
+  \obs_t =
+  \{I_t^{1:C}, q_t, f_t, m_t\}.
+  \label{eq:observation_set}
+\end{equation}
+
+$I_t^{1:C}$는 $C$개의 카메라 영상, $q_t$는 joint angle, velocity, gripper state 같은 proprioception, $f_t$는 force/torque 또는 tactile signal, $m_t$는 선택적으로 들어가는 memory state나 map representation이다. 언어 지시는 $\lang$으로 쓴다. 정책이 사용하는 이력은
+
+\begin{equation}
+  \hist_t = \{ \obs_{t-k:t}, \act_{t-k:t-1} \}
+\end{equation}
+
+처럼 최근 $k$ step 관측과 행동을 포함한다. 그러면 VLA 정책은 일반적으로 다음 조건부 분포로 쓸 수 있다.
+
+\begin{equation}
+  \pi_\theta(\Act_t \mid \hist_t, \lang),
+  \label{eq:general_vla}
+\end{equation}
+
+여기서 $\Act_t$는 반드시 단일 행동일 필요가 없다. 단일 step 행동 $\act_t$일 수도 있고, horizon $H$의 action chunk $\act_{t:t+H-1}$일 수도 있으며, discretized token sequence $u_{1:L}$일 수도 있다. 많은 논문의 차이는 결국 $\Act_t$를 어떻게 정의하는가에서 나온다.
+
+\section{관측 인코더}
+
+VLA의 첫 모듈은 관측 인코더이다. 가장 단순한 경우에는 RGB 이미지 한 장을 vision encoder에 넣는다.
+
+\begin{equation}
+  z_t^{\mathrm{vis}} = E_{\mathrm{vis}}(I_t).
+\end{equation}
+
+그러나 실제 로봇에서는 한 장의 이미지가 충분하지 않은 경우가 많다. manipulation에서는 wrist camera와 external camera가 서로 다른 정보를 제공한다. wrist camera는 end-effector 주변의 접촉과 물체 상대 위치를 잘 보고, external camera는 전체 장면과 goal object 위치를 잘 본다. multi-view VLA는 이를 다음처럼 결합한다.
+
+\begin{equation}
+  z_t^{\mathrm{vis}}
+  =
+  \mathrm{Fuse}\left(
+    E_{\mathrm{vis}}(I_t^1),
+    E_{\mathrm{vis}}(I_t^2),
+    \ldots,
+    E_{\mathrm{vis}}(I_t^C)
+  \right).
+  \label{eq:multiview}
+\end{equation}
+
+이때 $\mathrm{Fuse}$는 단순 concatenation일 수도 있고, cross-attention일 수도 있으며, view token을 transformer에 넣는 방식일 수도 있다. 논문을 읽을 때는 multi-view를 썼다는 사실만 볼 것이 아니라 camera calibration, view ordering, missing view 처리, inference cost를 함께 확인해야 한다.
+
+Proprioception도 중요하다. 로봇의 현재 joint state를 모르면 같은 이미지와 같은 언어 지시에서도 필요한 action이 달라진다. 예를 들어 gripper가 이미 컵 가까이에 있는 상태와 테이블 바깥에 있는 상태는 같은 ``컵을 잡아라'' 명령에 대해 다른 행동을 요구한다. 따라서 상태 인코더는 보통 다음과 같이 둔다.
+
+\begin{equation}
+  z_t^{\mathrm{state}} = E_{\mathrm{state}}(q_t, \dot{q}_t, g_t),
+\end{equation}
+
+여기서 $g_t$는 gripper state이다. Force-aware VLA나 contact-rich manipulation 논문에서는 $f_t$를 별도 인코더에 넣는다.
+
+\begin{equation}
+  z_t^{\mathrm{force}} = E_{\mathrm{force}}(f_{t-r:t}).
+\end{equation}
+
+force signal은 이미지보다 낮은 차원이지만, 접촉 상태를 직접 반영한다는 점에서 중요하다. 다만 force를 넣으면 sensor calibration, noise filtering, contact timing alignment가 새 문제가 된다.
+
+\section{언어 인코더와 goal representation}
+
+언어 지시 $\lang$는 단순한 문자열이 아니다. VLA에서 언어는 task identity, object reference, spatial relation, temporal order, constraint를 모두 포함할 수 있다. 언어 인코더는 이를 embedding으로 바꾼다.
+
+\begin{equation}
+  z^{\mathrm{lang}} = E_{\mathrm{lang}}(\lang).
+\end{equation}
+
+문제는 $z^{\mathrm{lang}}$가 어떤 수준의 goal을 표현하는가이다. ``빨간 컵을 접시 위에 놓아라''라는 지시는 최소한 다음 정보를 포함한다.
+
+\begin{enumerate}
+  \item target object: 빨간 컵
+  \item destination object 또는 region: 접시
+  \item relation: 위에 놓기
+  \item implicit constraints: 컵을 떨어뜨리지 않기, 장애물과 충돌하지 않기
+  \item terminal condition: 컵이 접시 위에 안정적으로 놓인 상태
+\end{enumerate}
+
+VLA 논문이 언어 지시를 다룬다고 말하더라도, 실제로는 template instruction만 쓰는 경우가 많다. template instruction은 일반화 평가를 단순하게 만들지만, 자연어 ambiguity나 compositional instruction을 충분히 검증하지 못한다. 따라서 언어 일반화를 주장하는 논문은 seen template, unseen template, unseen object, unseen composition을 분리해서 보여 주어야 한다.
+
+\section{멀티모달 결합}
+
+관측과 언어를 얻은 뒤에는 이를 결합해야 한다. 가장 단순한 구조는 모든 embedding을 concatenate한 뒤 MLP 또는 transformer에 넣는 것이다.
+
+\begin{equation}
+  c_t =
+  F_\theta
+  \left(
+    z_t^{\mathrm{vis}},
+    z_t^{\mathrm{state}},
+    z^{\mathrm{lang}}
+  \right).
+  \label{eq:context}
+\end{equation}
+
+$c_t$는 policy head가 사용할 context이다. 큰 VLA 모델에서는 $F_\theta$가 VLM backbone 또는 LLM decoder일 수 있다. Adapter 기반 모델에서는 backbone은 고정하고, visual token과 action token 사이에 작은 학습 가능 모듈을 삽입한다. Routing이나 sparsification 기반 모델에서는 모든 token이 같은 계산 경로를 지나지 않도록 선택적으로 처리한다.
+
+멀티모달 결합에서 중요한 질문은 세 가지이다. 첫째, 언어가 시각 token에 언제 영향을 주는가? early fusion이면 vision feature 추출 단계부터 언어가 개입하고, late fusion이면 이미 추출된 feature를 나중에 합친다. 둘째, 로봇 상태가 transformer context 안에 들어가는가, 아니면 마지막 policy head에만 들어가는가? 셋째, action history가 포함되는가? 이 질문에 따라 같은 backbone이라도 폐루프 성질이 달라진다.
+
+\begin{table}[t]
+  \centering
+  \caption{멀티모달 결합 방식의 차이}
+  \label{tab:fusion_types}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{32mm}X}
+    \toprule
+    결합 방식 & 공학적 의미 \\
+    \midrule
+    Early fusion & 언어가 시각 feature 추출부터 영향을 주어 target object grounding에 유리할 수 있다. \\
+    Late fusion & 각 modality를 독립적으로 인코딩한 뒤 합쳐 구현이 단순하지만 세밀한 grounding이 약할 수 있다. \\
+    Cross-attention & 언어 token과 시각 token 사이의 대응을 명시적으로 학습할 수 있다. \\
+    Adapter fusion & 큰 backbone을 고정하고 작은 모듈만 학습해 비용을 줄인다. \\
+    Routed fusion & token이나 expert를 조건부로 선택해 계산량을 줄이고 task별 specialization을 유도한다. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{행동 공간}
+
+VLA에서 가장 중요한 설계 선택은 행동 공간이다. 일반적으로 행동은 다음 중 하나로 표현된다.
+
+\begin{enumerate}
+  \item joint position 또는 joint velocity
+  \item end-effector delta pose
+  \item gripper open/close를 포함한 Cartesian command
+  \item waypoint sequence
+  \item discretized action token
+  \item diffusion 또는 flow model이 생성한 action trajectory
+\end{enumerate}
+
+End-effector delta pose는 다음처럼 쓸 수 있다.
+
+\begin{equation}
+  \act_t =
+  (\Delta x_t, \Delta y_t, \Delta z_t,
+   \Delta r_t, \Delta p_t, \Delta y_t^{\mathrm{rot}}, g_t).
+  \label{eq:ee_action}
+\end{equation}
+
+여기서 앞의 세 항은 위치 변화, 다음 세 항은 회전 변화, 마지막 $g_t$는 gripper command이다. 이 표현은 조작 과제에서 자주 쓰이지만, controller가 end-effector command를 안정적으로 joint command로 변환한다는 가정이 필요하다.
+
+반대로 action token 방식은 continuous action을 codebook index로 바꾼다.
+
+\begin{equation}
+  u_t = Q(\act_t), \qquad u_t \in \{1,2,\ldots,K\}.
+  \label{eq:action_token}
+\end{equation}
+
+$Q$는 vector quantizer이고 $K$는 codebook size이다. 이 방식은 LLM/VLM의 token prediction 구조와 잘 맞지만, quantization error가 생긴다.
+
+\begin{equation}
+  \epsilon_Q
+  =
+  \mathbb{E}_{\act \sim \mathcal{D}}
+  \left[
+    \lVert \act - Q^{-1}(Q(\act)) \rVert_2^2
+  \right].
+  \label{eq:quantization_error}
+\end{equation}
+
+좋은 action tokenizer 논문은 단순히 token을 썼다고 말하지 않고, $\epsilon_Q$가 task success에 어떤 영향을 주는지 보여 주어야 한다. codebook이 너무 작으면 행동이 거칠어지고, 너무 크면 token prediction이 어려워질 수 있다.
+
+\section{정책 head}
+
+정책 head는 context $c_t$에서 행동을 생성한다. 가장 단순한 회귀 head는 평균 행동을 직접 예측한다.
+
+\begin{equation}
+  \hat{\act}_t = W c_t + b.
+  \label{eq:regression_head}
+\end{equation}
+
+이 방식은 빠르고 구현이 단순하지만 multi-modal action distribution을 표현하기 어렵다. 같은 장면에서 컵을 왼쪽으로 돌아 잡을 수도 있고 오른쪽으로 돌아 잡을 수도 있다. 평균을 내면 두 행동 사이의 부적절한 trajectory가 나올 수 있다.
+
+분포 기반 head는 평균과 분산을 예측한다.
+
+\begin{equation}
+  p_\theta(\act_t \mid c_t)
+  =
+  \mathcal{N}
+  \left(
+    \act_t;
+    \mu_\theta(c_t),
+    \Sigma_\theta(c_t)
+  \right).
+  \label{eq:gaussian_policy}
+\end{equation}
+
+Diffusion policy 계열은 행동 trajectory를 denoising 과정으로 생성한다. 단순화하면 noise가 섞인 trajectory $\Act^k$에서 더 깨끗한 trajectory $\Act^{k-1}$를 예측한다.
+
+\begin{equation}
+  p_\theta(\Act^{k-1} \mid \Act^k, c_t).
+  \label{eq:diffusion_step}
+\end{equation}
+
+Diffusion 방식은 multi-modal trajectory를 표현하는 데 강하지만, denoising step 수가 많으면 latency가 커진다. 그래서 2025--2026년에는 diffusion의 표현력과 real-time constraint를 동시에 맞추려는 연구가 늘었다. Flow policy도 비슷한 문제의식에서 등장한다. 핵심은 action distribution을 풍부하게 만들수록 inference cost가 증가하기 쉽다는 점이다.
+
+\section{학습 목적}
+
+가장 기본적인 VLA 학습은 demonstration action을 맞히는 behavior cloning이다. continuous action이면 평균제곱오차를 쓸 수 있다.
+
+\begin{equation}
+  \mathcal{L}_{\mathrm{MSE}}
+  =
+  \sum_{i,t}
+  \lVert
+    \act_{t}^{(i)}
+    -
+    \hat{\act}_{t}^{(i)}
+  \rVert_2^2.
+  \label{eq:mse_action}
+\end{equation}
+
+action token이면 cross entropy를 쓴다.
+
+\begin{equation}
+  \mathcal{L}_{\mathrm{CE}}
+  =
+  - \sum_{i,t}
+  \log
+  p_\theta
+  \left(
+    u_t^{(i)}
+    \mid
+    \hist_t^{(i)}, \lang^{(i)}
+  \right).
+  \label{eq:ce_action}
+\end{equation}
+
+Diffusion이면 noise prediction loss를 쓴다.
+
+\begin{equation}
+  \mathcal{L}_{\mathrm{diff}}
+  =
+  \mathbb{E}_{\Act, k, \epsilon}
+  \left[
+    \lVert
+    \epsilon -
+    \epsilon_\theta(\Act^k, k, c_t)
+    \rVert_2^2
+  \right].
+  \label{eq:diff_loss}
+\end{equation}
+
+세 loss는 서로 다른 action representation을 전제한다. 따라서 논문 비교에서 loss만 보거나 action representation만 보면 안 된다. 예를 들어 token CE loss가 낮아도 복원된 continuous action이 부드럽지 않으면 로봇 제어에 좋지 않을 수 있다. MSE loss가 낮아도 multi-modal demonstration에서는 평균 행동 문제가 생길 수 있다. Diffusion loss가 좋아도 inference latency가 제어 주기를 넘으면 배포가 어렵다.
+
+\section{Inference loop}
+
+VLA는 offline model이 아니라 실행 loop 안에 들어가는 정책이다. 한 step의 실행은 다음 순서로 볼 수 있다.
+
+\begin{enumerate}
+  \item sensor에서 이미지와 로봇 상태를 읽는다.
+  \item 전처리와 normalization을 수행한다.
+  \item VLA가 행동 또는 action chunk를 예측한다.
+  \item safety filter가 collision, joint limit, force limit을 검사한다.
+  \item low-level controller가 command를 실행한다.
+  \item 다음 관측을 받아 다시 반복한다.
+\end{enumerate}
+
+이를 시간 budget으로 쓰면 다음과 같다.
+
+\begin{equation}
+  \tau_{\mathrm{sense}}
+  +
+  \tau_{\mathrm{pre}}
+  +
+  \tau_{\mathrm{model}}
+  +
+  \tau_{\mathrm{safe}}
+  +
+  \tau_{\mathrm{ctrl}}
+  \le
+  \tau_{\mathrm{loop}}.
+  \label{eq:inference_loop_budget}
+\end{equation}
+
+여기서 $\tau_{\mathrm{loop}}$는 원하는 폐루프 주기이다. VLA 논문이 real-time을 주장한다면 $\tau_{\mathrm{model}}$만 보고해서는 부족하다. sensor I/O, image preprocessing, action decoding, safety filter까지 포함한 end-to-end latency가 필요하다.
+
+Action chunk를 쓰면 모델 호출 주기는 느려질 수 있지만 controller 실행은 빠르게 유지할 수 있다. $H$ step chunk를 $r$ Hz controller에서 실행하면, 모델 호출 주기는 대략 $r/H$가 된다. 하지만 chunk가 길수록 중간에 환경이 변했을 때 반응이 늦어진다. 따라서 chunk length $H$는 latency와 reactivity 사이의 hyperparameter이다.
+
+\section{메모리와 장기 과제}
+
+짧은 조작 과제에서는 현재 이미지와 언어 지시만으로도 충분해 보일 수 있다. 그러나 long-horizon task에서는 과거에 무엇을 했는지 기억해야 한다. 예를 들어 ``서랍을 열고, 컵을 넣고, 다시 닫아라''라는 과제에서는 현재 이미지가 같아도 현재 단계가 다르면 행동이 달라진다.
+
+메모리 상태를 $m_t$라고 하면 업데이트는 다음처럼 쓸 수 있다.
+
+\begin{equation}
+  m_t =
+  U_\theta(m_{t-1}, \obs_t, \act_{t-1}, \lang).
+  \label{eq:memory_update}
+\end{equation}
+
+정책은 $m_t$를 조건으로 행동을 낸다.
+
+\begin{equation}
+  \pi_\theta(\act_t \mid \obs_t, m_t, \lang).
+\end{equation}
+
+MemoryVLA류 논문은 이 구조를 명시적으로 강화하려는 방향으로 볼 수 있다. 다만 메모리가 있다고 해서 자동으로 reasoning이 생기는 것은 아니다. 메모리가 실제로 task progress, object state, failure state를 저장하는지 ablation으로 확인해야 한다.
+
+\section{Safety filter와 controller interface}
+
+많은 VLA 논문은 policy output까지만 설명하고, 실제 controller와 safety layer는 간단히 처리한다. 그러나 실제 로봇에서는 이 부분이 중요하다. VLA가 낸 행동 $\hat{\act}_t$는 그대로 실행되지 않고, 보통 safety filter를 지난다.
+
+\begin{equation}
+  \act_t^{\mathrm{exec}}
+  =
+  S(\hat{\act}_t, q_t, \mathcal{C}),
+  \label{eq:safety_filter}
+\end{equation}
+
+여기서 $S$는 safety filter이고, $\mathcal{C}$는 collision constraint, joint limit, velocity limit, force limit 같은 제약 집합이다. 만약 논문에서 safety filter가 강하게 개입한다면, 성공률이 VLA 자체의 능력인지 classical controller와 constraint checker의 도움인지 구분해야 한다.
+
+Controller interface도 마찬가지이다. End-effector command를 쓰는 정책은 inverse kinematics와 low-level impedance controller에 의존한다. Joint command를 직접 내는 정책은 더 직접적이지만 학습이 어려울 수 있다. Torque command까지 내려가면 제어 자유도는 커지지만 안전성과 데이터 요구량이 크게 증가한다.
+
+\section{구조 비교표}
+
+VLA 논문을 읽을 때는 다음 표를 채우면 구조가 명확해진다.
+
+\begin{table}[t]
+  \centering
+  \caption{VLA 구조 분석을 위한 최소 표}
+  \label{tab:architecture_template}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{34mm}X}
+    \toprule
+    항목 & 확인할 내용 \\
+    \midrule
+    관측 입력 & 카메라 수, image resolution, proprioception, force/tactile 포함 여부 \\
+    언어 입력 & template instruction, free-form instruction, multi-step instruction 여부 \\
+    backbone & VLM, LLM, transformer, diffusion model, frozen/fine-tuned 여부 \\
+    결합 방식 & early fusion, late fusion, cross-attention, adapter, routing \\
+    action space & joint, end-effector, waypoint, token, trajectory, action chunk \\
+    loss & MSE, cross entropy, diffusion loss, auxiliary loss, reward-based objective \\
+    inference & closed-loop 주기, chunk length, latency, safety filter \\
+    평가 & dataset, robot platform, success criterion, baseline, train-test split \\
+    공개 자원 & code, checkpoint, dataset, benchmark script \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+이 표는 이후 모든 장에서 반복해서 쓸 수 있다. 특히 action representation 논문, efficient VLA 논문, benchmark 논문은 contribution 위치가 다르기 때문에 같은 표로 정리해야 비교가 가능하다.
+
+\section{요약}
+
+VLA의 기본 구조는 관측 인코더, 언어 인코더, 멀티모달 결합부, 행동 표현부, 정책 head, 실행 loop로 나눌 수 있다. 이 분해를 사용하면 모델 이름이 달라도 논문이 실제로 어떤 병목을 해결하려는지 볼 수 있다. VLA에서 가장 중요한 설계 선택은 action representation과 inference loop이다. 언어와 시각을 잘 이해해도, 행동 표현이 부적절하거나 latency budget을 만족하지 못하면 실제 로봇 정책으로는 약하다.
+
+다음 장에서는 이 책 전체의 읽기 도구가 될 13개 질문 프레임을 정리한다. 13개 질문은 논문을 소개하는 양식이 아니라, VLA 연구가 충분히 공학적으로 설계되고 검증되었는지 평가하는 체크리스트로 사용할 것이다.
+
+\begin{sourcebox}{Key papers}
+\begin{itemize}
+  \item Driess et al. (2023), PaLM-E: embodied multimodal representation이 VLA 구조의 semantic side를 어떻게 준비했는지 보여 준다.
+  \item Brohan et al. (2023), RT-2: VLM token interface를 robot action으로 확장한 구조적 anchor이다.
+  \item Octo Model Team et al. (2024), Octo, arXiv preprint: 800k Open X-Embodiment trajectories 기반 open-source generalist policy이다.
+  \item Kim et al. (2024), OpenVLA: Llama 2, DINOv2, SigLIP 기반 open VLA architecture와 action head 연결을 확인할 수 있다.
+  \item NVIDIA et al. (2025), GR00T N1: vision-language module과 diffusion transformer action module을 분리한 humanoid VLA 사례이다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Basic]}
+OpenVLA, Octo, GR00T N1 중 하나를 골라 \cref{fig:vla_system_stack}의 다섯 블록에 대응되는 구체 모듈, 입력, 출력, 공개 여부를 표로 채워라.
+\end{assignmentbox}

@@ -1,0 +1,59 @@
+\chapter{Annotated Reading Catalog}
+\label{app:reading_catalog}
+
+이 부록은 References와 역할이 다르다. References는 citation-only 목록이고, 이 catalog는 source status, evidence type, artifact, caution을 한눈에 보기 위한 annotated reading guide이다. Catalog는 완전한 survey가 아니라 Ch15의 4-week reading plan을 지원하는 실전용 점검표이다.
+
+\section{Foundation and Open VLA Sources}
+
+\begin{table}[h]
+  \centering
+  \small
+  \caption{Foundation and open VLA reading catalog}
+  \label{tab:appendix_reading_catalog_foundation}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{28mm}p{23mm}p{26mm}X}
+    \toprule
+    Source & Status & Evidence & Usage and caution \\
+    \midrule
+    SayCan \citep{saycan} & arXiv & Real robot & Pre-VLA planning anchor; end-to-end VLA로 분류하지 않는다. \\
+    RT-1 \citep{rt1} & arXiv & Real robot & Real-world robot transformer scaling의 선행 흐름으로 읽는다. \\
+    RT-2 \citep{rt2} & arXiv/closed & Real robot & Web knowledge transfer anchor; closed-stack 조건을 분리한다. \\
+    PaLM-E \citep{palme} & arXiv & Embodied tasks & Embodied VLM antecedent; action policy evidence와 구분한다. \\
+    Diffusion Policy \citep{diffusionpolicy} & Peer-reviewed & Real/sim robot & Diffusion action decoder predecessor; VLA backbone 효과와 분리한다. \\
+    ACT/ALOHA \citep{aloha} & Peer-reviewed & Real robot & Action chunking and bimanual imitation anchor; language grounding은 제한적이다. \\
+    Open X-Embodiment \citep{openx} & arXiv/project & Multi-site real robot & Dataset scaling anchor; action normalization and mixture confound를 확인한다. \\
+    LIBERO \citep{libero} & arXiv/project & Simulation benchmark & Language-conditioned manipulation benchmark; sim-to-real claim은 따로 둔다. \\
+    Octo \citep{octo} & arXiv & Offline/real robot & Open generalist policy; goal image/language interface와 split을 확인한다. \\
+    OpenVLA \citep{openvla} & arXiv & Real robot/benchmark & Open VLA backbone; controller, split, public checkpoint 범위를 함께 본다. \\
+    \(\pi_0\) \citep{pi0} & arXiv/RSS & Real robot & Flow VLA anchor; real-time claim은 horizon/hardware 조건과 함께 읽는다. \\
+    OpenVLA-OFT \citep{openvlaoft} & arXiv/RSS & LIBERO/robot & Fine-tuning recipe anchor; success와 throughput의 protocol fairness를 확인한다. \\
+    FAST \citep{fast} & arXiv & Offline/robot & DCT action tokenization anchor; tokenizer-only effect를 분리한다. \\
+    VQ-VLA \citep{vqvla} & Peer-reviewed & Tokenizer eval & VQ tokenizer scaling anchor; reconstruction과 closed-loop success를 분리한다. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Emerging and Industrial VLA Sources}
+
+\begin{table}[h]
+  \centering
+  \small
+  \caption{Emerging and industrial VLA reading catalog}
+  \label{tab:appendix_reading_catalog_emerging}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{30mm}p{24mm}p{28mm}X}
+    \toprule
+    Source & Status & Evidence & Usage and caution \\
+    \midrule
+    \(\pi_{0.5}\) \citep{pi05} & arXiv & Real/co-training & Open-world generalization front; emerging-front wording을 유지한다. \\
+    SmolVLA \citep{smolvla} & arXiv & Deployment/robot & Consumer GPU/CPU deployment를 목표로 async stack을 제시한다; task coverage와 hardware setting을 확인한다. \\
+    GR00T N1 \citep{grootn1} & arXiv & Humanoid real/sim & Dual-system humanoid VLA anchor; 공개 artifact와 dataset mixture 범위를 확인한다. \\
+    Helix \citep{helix} & Company report & Company demo & Industrial humanoid VLA claim; peer-reviewed benchmark evidence처럼 쓰지 않는다. \\
+    Gemini Robotics 1.5 \citep{geminirobotics} & Company report & Company demo/report & Closed industrial VLA; motor command interface와 공개 검증 한계를 분리한다. \\
+    Gemini Robotics-ER 1.6 \citep{geminiroboticser} & Company report & Embodied reasoning report & VLA action model이 아니라 embodied reasoning model로 구분한다. \\
+    WorldVLA \citep{worldvla} & Preprint/report & Reported model eval & Pixel quality보다 planning utility와 candidate ranking evidence를 본다. \\
+    VLA-OS \citep{vlaos} & arXiv & Planning comparison & Planning representation anchor; action-level success evidence를 확인한다. \\
+    RoboTwin 2.0 \citep{robotwin2} & arXiv/project & Simulation benchmark & Bimanual simulation benchmark; real deployment validity는 분리한다. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+이 두 표는 source의 존재와 source의 claim이 검증되었는지를 분리하기 위한 장치이다. 특히 emerging-front와 company report는 field direction을 보여 주는 신호로는 중요하지만, 공개 benchmark evidence와 같은 무게로 읽으면 안 된다.

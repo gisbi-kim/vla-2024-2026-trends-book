@@ -1,0 +1,279 @@
+\chapter{World Models and Simulation: 행동 전에 세계를 예측하기}
+\label{ch:world_models_simulation}
+
+9장에서는 reasoning을 행동 전에 필요한 중간 계산으로 정의했다. 이 장은 그 중간 계산 중 가장 물리적인 부분을 다룬다. 로봇이 행동하기 전에 ``이 행동을 하면 세계가 어떻게 변하는가''를 예측할 수 있다면, planning, safety check, recovery가 모두 강해진다. World model은 이 예측을 담당하는 모델이고, simulation은 이 예측을 대규모로 시험하거나 학습시키는 환경이다.
+
+\section{World model의 기본 형태}
+
+World model은 현재 상태와 행동이 주어졌을 때 다음 상태 또는 미래 관측을 예측하는 함수이다.
+
+\begin{equation}
+  p_\phi(s_{t+1} \mid s_t,a_t),
+  \qquad
+  p_\phi(o_{t+1} \mid o_{\le t},a_t).
+\end{equation}
+
+VLA에서는 state $s_t$를 직접 알기 어려우므로 관측 기반 world model이 더 자주 쓰인다.
+
+\begin{equation}
+  \hat{o}_{t+1:t+H}
+  =
+  f_\phi(o_{1:t},a_{t:t+H-1},q).
+\end{equation}
+
+여기서 $\hat{o}_{t+1:t+H}$는 미래 image, depth, object state, affordance map, contact state, success probability 등일 수 있다. 중요한 점은 world model이 VLA backbone과 완전히 별개일 필요는 없다는 것이다. Transformer의 hidden state가 implicit world model 역할을 할 수도 있고, 별도 video prediction model이나 dynamics model을 붙일 수도 있다.
+
+\section{왜 VLA에 world model이 필요한가}
+
+순수 reactive policy는 현재 관측에서 바로 action을 낸다.
+
+\begin{equation}
+  a_t = \pi_\theta(o_t,q).
+\end{equation}
+
+이 구조는 빠르지만, 행동의 결과를 미리 평가하지 않는다. 반면 model-based policy는 candidate action을 rollout하고 평가할 수 있다.
+
+\begin{equation}
+  a_t^\star
+  =
+  \arg\max_{a_t}
+  \mathbb{E}_{\hat{\tau}\sim p_\phi}
+  \left[
+    R(\hat{\tau},q)
+    -
+    \lambda C(\hat{\tau})
+  \right].
+\end{equation}
+
+여기서 $\hat{\tau}$는 world model이 예측한 미래 trajectory이다. 이 식은 9장의 reasoning과 직접 연결된다. Reasoning이 subgoal과 constraint를 만들면, world model은 그 subgoal을 실행했을 때 실제 장면이 어떻게 변할지 평가한다.
+
+VLA에서 world model이 특히 필요한 경우는 contact-rich manipulation, long-horizon task, safety-critical setting, partial observability, human interaction이다. 행동 결과가 단순하지 않고, 한 번의 실패 비용이 큰 경우일수록 예측이 중요하다.
+
+\section{Video prediction과 action-conditioned prediction}
+
+가장 직관적인 world model은 video prediction이다. 과거 이미지와 행동을 보고 미래 이미지를 만든다.
+
+\begin{equation}
+  \hat{I}_{t+1:t+H}
+  =
+  f_\phi(I_{1:t},a_{t:t+H-1},q).
+\end{equation}
+
+문제는 pixel-level prediction이 로봇 제어에 항상 좋은 objective는 아니라는 것이다. 배경 texture를 잘 예측하는 것보다, 물체 pose, 접촉, 성공 여부를 잘 예측하는 것이 더 중요하다. 따라서 VLA용 world model은 pixel loss뿐 아니라 task-relevant latent를 예측해야 한다.
+
+\begin{equation}
+  z_{t+1}
+  =
+  e_\psi(o_{t+1}),
+  \qquad
+  \hat{z}_{t+1}
+  =
+  f_\phi(z_t,a_t,q).
+\end{equation}
+
+$z_t$는 object-centric representation, scene graph, keypoint, affordance field, latent visual token일 수 있다. 좋은 world model은 모든 픽셀을 정확히 맞히는 모델이 아니라, 행동 선택에 필요한 미래 변수를 맞히는 모델이다.
+
+\section{Object-centric world model}
+
+Manipulation에서는 object state가 중요하다. 따라서 scene을 object set으로 표현하는 방식이 유용하다.
+
+\begin{equation}
+  S_t =
+  \{(c_i,p_i,R_i,v_i,\alpha_i)\}_{i=1}^{N_t},
+\end{equation}
+
+$c_i$는 object category, $p_i$와 $R_i$는 pose, $v_i$는 velocity, $\alpha_i$는 affordance 또는 상태이다. Object-centric model은 다음을 예측한다.
+
+\begin{equation}
+  S_{t+1}
+  =
+  F_\phi(S_t,a_t,q).
+\end{equation}
+
+이 표현은 planning과 해석에 좋다. ``컵이 목표 영역 안에 들어갔는가'', ``서랍이 열렸는가'', ``장애물과 충돌했는가''를 직접 계산할 수 있다. 단점은 object detection과 pose estimation이 어려우며, deformable object나 fluid처럼 명확한 object state를 정의하기 어려운 경우가 있다는 점이다.
+
+\section{Language-conditioned world model}
+
+VLA의 world model은 언어와 분리될 수 없다. 같은 장면에서도 지시가 다르면 예측해야 할 미래가 달라진다. 예를 들어 같은 컵을 보더라도 ``컵을 집어라''와 ``컵을 밀어라''는 다른 미래 상태를 요구한다.
+
+\begin{equation}
+  p_\phi(s_{t+1:t+H} \mid s_t,a_{t:t+H-1},q)
+  \ne
+  p_\phi(s_{t+1:t+H} \mid s_t,a_{t:t+H-1}).
+\end{equation}
+
+언어는 reward와 constraint도 정의한다.
+
+\begin{equation}
+  R(\tau,q)
+  =
+  r_{\mathrm{task}}(\tau,q)
+  -
+  \lambda_{\mathrm{safety}} c_{\mathrm{safety}}(\tau)
+  -
+  \lambda_{\mathrm{effort}} c_{\mathrm{effort}}(\tau).
+\end{equation}
+
+따라서 language-conditioned world model은 미래 상태 예측뿐 아니라, 그 미래가 지시를 만족하는지 판단하는 model도 포함한다. VLM 기반 reward model이나 success classifier가 여기에 들어갈 수 있다.
+
+\section{Simulation as data engine}
+
+Simulation은 world model을 직접 쓰는 방식이기도 하고, world model을 학습하기 위한 data engine이기도 하다. Simulation에서 다양한 scene과 action을 생성하면 real robot보다 훨씬 많은 transition을 얻을 수 있다.
+
+\begin{equation}
+  \mathcal{D}_{\mathrm{sim}}
+  =
+  \{(o_t,a_t,o_{t+1},q,r_t)\}_{t=1}^{M}.
+\end{equation}
+
+Simulation의 강점은 scale과 control이다. 물체 위치, 조명, 마찰, 질량, 카메라 pose, distractor를 체계적으로 바꿀 수 있다. 또한 unsafe action도 실제 위험 없이 시험할 수 있다. Safety-critical VLA에서는 simulation이 거의 필수적이다.
+
+그러나 8장에서 본 것처럼 sim-to-real gap이 있다.
+
+\begin{equation}
+  p_{\mathrm{sim}}(o_{t+1}\mid o_t,a_t)
+  \ne
+  p_{\mathrm{real}}(o_{t+1}\mid o_t,a_t).
+\end{equation}
+
+이 gap을 줄이기 위해 domain randomization, system identification, real-to-sim calibration, residual dynamics learning을 사용한다. 중요한 것은 simulation 결과를 실제 성능으로 과장하지 않고, 어떤 역할로 사용했는지 명확히 하는 것이다.
+
+\section{Model predictive control과 VLA}
+
+World model이 있으면 model predictive control(MPC)을 사용할 수 있다.
+
+\begin{equation}
+  a_{t:t+H-1}^\star
+  =
+  \arg\max_{a_{t:t+H-1}}
+  \sum_{k=0}^{H-1}
+  R(\hat{s}_{t+k},a_{t+k},q),
+\end{equation}
+
+\begin{equation}
+  \hat{s}_{t+k+1}
+  =
+  f_\phi(\hat{s}_{t+k},a_{t+k}).
+\end{equation}
+
+MPC는 첫 action만 실행하고 다음 관측에서 다시 최적화한다. 이는 7장의 closed-loop manipulation과 잘 맞는다. VLA는 candidate action이나 subgoal을 제안하고, world model과 MPC는 그 후보를 평가하여 더 안전한 선택을 할 수 있다.
+
+다만 VLA에서 MPC는 계산 비용이 크다. Action space가 고차원이고 world model이 neural network이면 많은 rollout이 필요하다. 따라서 practical VLA는 다음 중 하나를 선택한다.
+
+\begin{itemize}
+  \item VLA가 소수의 candidate subgoal을 만들고 world model이 ranking한다.
+  \item Low-level continuous control은 classical MPC에 맡기고 VLA는 goal을 준다.
+  \item Learned value function으로 rollout 수를 줄인다.
+  \item Diffusion 또는 sampling policy를 proposal distribution으로 사용한다.
+\end{itemize}
+
+\section{Counterfactual reasoning}
+
+World model이 있으면 ``만약 이 행동을 하면 어떻게 되는가''를 비교할 수 있다.
+
+\begin{equation}
+  \Delta R
+  =
+  R(\hat{\tau}^{(1)},q)
+  -
+  R(\hat{\tau}^{(2)},q).
+\end{equation}
+
+예를 들어 컵을 왼쪽에서 잡는 후보와 오른쪽에서 잡는 후보를 비교할 수 있다. 서랍을 당기기 전에 물체를 치울지, 바로 손잡이를 잡을지 비교할 수 있다. 이런 counterfactual reasoning은 단순 imitation dataset에는 직접 들어 있지 않은 판단을 가능하게 한다.
+
+하지만 예측이 틀리면 counterfactual 비교도 틀린다. 특히 접촉, 마찰, deformable object에서는 world model error가 빠르게 누적된다.
+
+\begin{equation}
+  \epsilon_H
+  =
+  \|s_{t+H} - \hat{s}_{t+H}\|
+  \le
+  L^H \epsilon_0
+  +
+  \sum_{k=0}^{H-1} L^{H-1-k}\delta_k.
+\end{equation}
+
+$L$은 dynamics의 Lipschitz-like factor이고, $\delta_k$는 step-wise model error이다. Horizon이 길어지면 오차가 커질 수 있으므로, world model은 장기 예측보다 short-horizon verification과 replanning에 더 실용적일 때가 많다.
+
+\section{World model 평가}
+
+World model을 pixel MSE로만 평가하면 부족하다. VLA에서 필요한 평가는 다음과 같다.
+
+\begin{table}[t]
+  \centering
+  \caption{VLA world model 평가 기준}
+  \label{tab:world_model_eval}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{34mm}X}
+    \toprule
+    항목 & 확인할 내용 \\
+    \midrule
+    Prediction accuracy & 미래 image, pose, affordance, contact state를 얼마나 잘 예측하는가 \\
+    Task relevance & 예측 오차가 실제 success와 상관되는가 \\
+    Planning utility & world model을 쓰면 policy success가 오르는가 \\
+    Safety utility & collision, force, unsafe state를 사전에 감지하는가 \\
+    Horizon robustness & 예측 horizon이 길어질 때 error가 어떻게 증가하는가 \\
+    Sim-to-real validity & simulation 또는 learned dynamics가 real robot ranking과 맞는가 \\
+    Latency & rollout과 scoring이 control loop에 들어갈 수 있는가 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+가장 중요한 평가는 planning utility이다. 미래 이미지를 예쁘게 만드는 world model보다, 성공 후보와 실패 후보를 구분하는 world model이 로봇에는 더 유용하다.
+
+\begin{casebox}{Review box: Pixel prediction, object-state prediction, candidate ranking}
+World model 논문은 무엇을 예측하는지와 그 예측이 행동 선택에 어떻게 쓰이는지를 분리해서 읽어야 한다.
+
+\vspace{0.5em}
+\begin{tabularx}{\linewidth}{>{\bfseries}p{34mm}X}
+  \toprule
+  예측 수준 & 리뷰할 질문 \\
+  \midrule
+  Pixel prediction & 미래 image/video가 그럴듯한가보다, object pose, contact, occlusion, failure precursor를 보존하는가가 중요하다. \\
+  Object-state prediction & Object pose, relation, affordance, contact state가 task success와 직접 연결되는 변수로 예측되는가? \\
+  Candidate ranking & 여러 action 후보 중 성공 가능성이 높은 후보를 더 잘 고르는가, 그리고 ranking accuracy가 rollout success와 상관되는가? \\
+  Safety utility & Collision, force violation, unreachable state, human proximity 같은 위험을 실행 전에 걸러내는가? \\
+  Cost & Rollout과 scoring latency가 control loop 안에 들어오며, reactive baseline 대비 net utility가 남는가? \\
+  \bottomrule
+\end{tabularx}
+\end{casebox}
+
+\section{요약}
+
+World model은 VLA가 행동하기 전에 미래를 평가하게 만드는 장치이다. Video prediction, object-centric dynamics, language-conditioned reward, simulation, MPC는 모두 이 목적을 위한 서로 다른 구현이다. 그러나 world model은 만능이 아니다. 접촉 동역학과 장기 horizon에서는 예측 오차가 누적되고, simulation은 real world와 다르며, rollout은 latency를 늘린다. 따라서 VLA에서 world model은 reactive policy를 대체하기보다, safety check, candidate ranking, short-horizon replanning, failure recovery를 보강하는 도구로 보는 것이 현실적이다.
+
+다음 장에서는 예측과 planning이 실패했을 때 발생하는 문제를 정리한다. VLA가 실제 환경에 배포되려면 평균 성공률보다 robustness, safety, failure mode가 더 중요해지는 순간이 온다.
+
+\begin{casebox}{Case study: WorldVLA}
+WorldVLA류 논문은 action prediction과 image understanding/generation을 unified autoregressive action world model로 묶으려는 방향으로 읽을 수 있다. 이때 중요한 검증은 생성 이미지의 시각 품질보다, rollout이나 imagined transition이 candidate action ranking, short-horizon replanning, failure avoidance에 실제 이득을 주는지이다. 즉 WorldVLA는 10장의 핵심 문장인 ``planning utility가 pixel score보다 중요하다''를 적용해 읽어야 한다.
+\end{casebox}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{Claim-source-evidence-caution map for world models}
+  \label{tab:ch10_claim_source}
+  \begin{tabularx}{\textwidth}{L{31mm}L{30mm}L{46mm}Y}
+    \toprule
+    Claim & Source & Evidence & Caution \\
+    \midrule
+    Action world models should be judged by planning utility & WorldVLA \citep{worldvla} & Autoregressive action/world modeling report & Pixel or latent prediction quality alone is insufficient. \\
+    Planning representation affects VLA behavior & VLA-OS \citep{vlaos} & Structured comparison of planning paradigms & Need direct action-level success and recovery evidence. \\
+    Embodied reasoning can be a separate module from action VLA & Gemini Robotics-ER \citep{geminiroboticser} & Company report on embodied reasoning & Closed-stack claim; mark as evidence level C unless reproducible artifacts exist. \\
+    Simulation is useful when ranking transfers & RoboTwin 2.0 \citep{robotwin2}, LIBERO \citep{libero} & Controlled simulation benchmarks & Sim-to-real validity must not be assumed. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{sourcebox}{Key papers}
+\begin{itemize}
+  \item Ha and Schmidhuber (2018), World Models: learned dynamics와 policy를 분리해서 생각하는 기본 관점을 제공한다.
+  \item Du et al. 계열 video/world model 논문: action-conditioned prediction과 planning utility를 비교할 때 참고할 수 있다.
+  \item WorldVLA (2025), preprint/project report: autoregressive action world model을 VLA 흐름 안에 넣는 최신 사례이다.
+  \item RoboTwin 2.0 계열 논문: simulation이 data engine과 evaluation environment로 동시에 쓰이는 사례이다.
+  \item Gemini Robotics-ER (2025/2026): world understanding, planning, embodied reasoning을 closed industrial stack으로 제시하는 사례이다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Advanced]}
+World model 논문 하나를 골라 prediction metric, task metric, planning utility metric을 분리하고, 세 지표가 같은 결론을 주는지 확인하라.
+\end{assignmentbox}

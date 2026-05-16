@@ -1,0 +1,317 @@
+\chapter{VLA 연구를 읽는 13개 질문}
+
+\section{장의 목표}
+
+앞의 두 장에서는 VLA를 언어 조건부 폐루프 정책으로 정의하고, 관측 인코더, 언어 인코더, 멀티모달 결합, 행동 표현, 정책 head, 실행 loop로 구조를 분해했다. 이제 필요한 것은 논문을 읽을 때 같은 기준으로 비교하는 방법이다. VLA 논문은 빠르게 늘고 있으며, 제목만 보면 모두 ``generalist robot policy'', ``efficient VLA'', ``reasoning VLA''처럼 보일 수 있다. 그러나 실제 기여는 서로 다르다. 어떤 논문은 행동 표현을 바꾸고, 어떤 논문은 fine-tuning recipe를 바꾸며, 어떤 논문은 벤치마크를 만든다.
+
+이 장의 목적은 VLA 논문을 읽는 13개 질문을 공학적 평가 도구로 정식화하는 것이다. 여기서 13개 질문은 요약 양식이 아니다. 논문이 실제로 무엇을 주장하며, 그 주장이 어떤 실험으로 검증되었고, 어디까지 믿을 수 있는지를 확인하는 audit checklist이다.
+
+\section{13개 질문의 전체 구조}
+
+이 책에서 사용하는 13개 질문은 다음과 같다.
+
+\begin{enumerate}
+  \item 배경: 이 연구는 어떤 분야와 임무 맥락에 놓이는가?
+  \item 문제: 구체적으로 어떤 기능 또는 과제를 풀려 하는가?
+  \item 기존 한계: 이전 접근의 어떤 병목 때문에 새 방법이 필요한가?
+  \item 목표: 논문이 달성하려는 목표는 측정 가능한가?
+  \item 방법: 제안 시스템은 어떤 입력, 출력, 모듈, 학습 절차를 갖는가?
+  \item 핵심 아이디어: 기술적으로 무엇이 새롭거나 중요한가?
+  \item 검증: 어떤 데이터셋, 시뮬레이터, 실제 로봇, 시나리오로 평가했는가?
+  \item 결과: 어떤 지표에서 얼마나 좋아졌는가?
+  \item 비교: baseline은 공정하고 충분히 강한가?
+  \item 의의: 결과가 VLA와 로봇 학습에서 무엇을 가능하게 하는가?
+  \item 한계: 남은 제약과 실패 모드는 무엇인가?
+  \item 향후 과제: 다음 연구 단계는 구체적으로 무엇인가?
+  \item 자원 공개: 코드, 데이터, checkpoint, benchmark가 공개되었는가?
+\end{enumerate}
+
+이 순서는 중요하다. 많은 논문 요약은 방법과 결과부터 시작하지만, 그렇게 읽으면 왜 그 방법이 필요한지 놓치기 쉽다. 반대로 배경과 문제만 길게 읽으면 논문이 실제로 무엇을 검증했는지 흐려진다. 13개 질문은 논문의 주장 흐름을 배경에서 공개 자원까지 닫힌 형태로 추적한다.
+
+\section{질문 1--4: 문제 설정을 검증하기}
+
+첫 네 질문은 논문의 문제 설정을 검사한다. 좋은 VLA 논문은 배경, 문제, 기존 한계, 목표가 서로 직접 연결된다. 예를 들어 ``VLA가 느리다''는 배경이 있다면 문제는 추론 latency여야 하고, 기존 한계는 autoregressive decoding 또는 큰 backbone의 계산량이어야 하며, 목표는 latency를 줄이면서 success rate를 유지하는 것이어야 한다. 만약 배경은 real-world deployment인데 실험은 작은 offline dataset에만 머문다면 문제 설정과 검증이 분리된 것이다.
+
+\subsection{배경}
+
+배경은 연구의 큰 위치를 정한다. VLA 논문에서 배경은 보통 다음 중 하나이다.
+
+\begin{itemize}
+  \item manipulation: 언어 지시를 실제 조작 행동으로 바꾸는 문제
+  \item efficient VLA: 큰 VLA를 실제 제어 주기에 맞추는 문제
+  \item action representation: 연속 행동을 모델이 다루기 쉬운 표현으로 바꾸는 문제
+  \item benchmark: 모델 성능을 공정하게 비교하는 문제
+  \item reasoning and planning: 장기 과제와 단계적 의사결정을 다루는 문제
+  \item robustness and safety: 분포 변화와 실패 모드를 다루는 문제
+\end{itemize}
+
+배경을 쓸 때는 ``로봇이 중요하다'' 같은 일반론으로 끝내면 안 된다. 어떤 로봇 과제, 어떤 데이터 흐름, 어떤 deployment constraint가 문제인지 지정해야 한다.
+
+\subsection{문제}
+
+문제는 구체적이어야 한다. ``VLA의 성능을 높인다''는 문제 정의가 아니다. 다음처럼 변수와 평가 기준으로 바꿀 수 있어야 한다.
+
+\begin{equation}
+  \max_\theta \; \mathrm{SR}(\theta)
+  \quad
+  \mathrm{s.t.}
+  \quad
+  \tau_{\mathrm{model}}(\theta) \le \tau_{\max}.
+  \label{eq:problem_efficiency}
+\end{equation}
+
+이 식은 efficient VLA 논문의 문제 정의에 가깝다. 성공률을 최대화하되 모델 추론 시간이 허용 범위를 넘지 않아야 한다. Action representation 논문이라면 문제는 quantization error와 policy loss 사이의 균형이 될 수 있다.
+
+\begin{equation}
+  \min_{Q,\theta}
+  \mathcal{L}_{\mathrm{policy}}(\theta; Q)
+  +
+  \lambda \epsilon_Q.
+  \label{eq:problem_tokenization}
+\end{equation}
+
+문제 정의가 이런 식으로 쓰이지 않더라도, 독자는 논문을 읽으며 암묵적 objective를 복원해야 한다.
+
+\subsection{기존 한계}
+
+기존 한계는 논문의 필요성을 만드는 부분이다. 약한 논문은 기존 연구를 단순히 ``비싸다'', ``느리다'', ``일반화가 약하다''라고 말하지만, 어떤 구조적 원인 때문에 그런지 설명하지 않는다. 강한 논문은 한계를 모듈 수준으로 지정한다. 예를 들어 action tokenization이 약하다면 codebook 설계가 문제인지, temporal consistency가 문제인지, high-frequency control과 token prediction의 mismatch가 문제인지 밝혀야 한다.
+
+\subsection{목표}
+
+목표는 측정 가능해야 한다. 목표가 ``더 일반적인 VLA''라면 어떤 test split에서 일반화를 측정하는지 필요하다. 목표가 ``real-time VLA''라면 loop frequency와 latency budget이 필요하다. 목표가 ``robust VLA''라면 어떤 perturbation, distractor, unseen object, unseen instruction을 넣는지 필요하다. 목표가 측정 불가능하면 실험이 좋아 보여도 주장이 닫히지 않는다.
+
+\section{질문 5--6: 방법의 기술적 중심 찾기}
+
+질문 5와 6은 방법을 읽는 단계이다. 여기서 중요한 것은 방법 설명과 핵심 아이디어를 분리하는 것이다. 방법은 시스템 전체의 구성이고, 핵심 아이디어는 그중 논문이 실제로 새로 만든 부분이다.
+
+\subsection{방법}
+
+VLA 방법 설명은 최소한 다음 다섯 항목을 포함해야 한다.
+
+\begin{enumerate}
+  \item 입력: 이미지, 비디오, proprioception, force, 언어 지시
+  \item 출력: action token, end-effector command, joint command, trajectory, action chunk
+  \item backbone: VLM, LLM, transformer, diffusion/flow model
+  \item 학습: behavior cloning, instruction tuning, reinforcement fine-tuning, adapter tuning
+  \item 추론: closed-loop frequency, chunk length, decoding step, safety filter
+\end{enumerate}
+
+논문이 모델 그림만 보여 주고 위 항목을 명확히 하지 않으면 재현성이 약하다. 특히 action space와 controller interface는 반드시 확인해야 한다.
+
+\subsection{핵심 아이디어}
+
+핵심 아이디어는 한 문장으로 줄일 수 있어야 한다. 예를 들어 다음과 같이 쓸 수 있다.
+
+\begin{itemize}
+  \item Action tokenization 논문: 연속 로봇 행동을 VLM/LLM이 예측하기 쉬운 discrete token sequence로 바꾼다.
+  \item Efficient VLA 논문: 모든 token을 같은 계산량으로 처리하지 않고 task-relevant token만 선택적으로 계산한다.
+  \item Post-training 논문: pretrained VLA를 simulator reward 또는 verified feedback으로 다시 보정한다.
+  \item Benchmark 논문: 다양한 과제와 domain randomization으로 VLA의 robustness를 같은 조건에서 비교한다.
+\end{itemize}
+
+핵심 아이디어가 ``새로운 framework를 제안한다''로만 남으면 부족하다. 어떤 병목을 어떤 mechanism으로 줄이는지가 보여야 한다.
+
+\section{질문 7--9: 검증의 공정성 보기}
+
+질문 7--9는 논문의 실험을 평가한다. VLA 분야에서 실험은 특히 조심해서 봐야 한다. 로봇 플랫폼, reset 방식, instruction template, object set, camera view, demonstration quality가 조금만 달라도 성공률이 달라진다.
+
+\subsection{검증}
+
+검증은 다음 세 수준으로 나눌 수 있다.
+
+\begin{table}[t]
+  \centering
+  \caption{VLA 검증 수준}
+  \label{tab:validation_levels}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{32mm}X}
+    \toprule
+    수준 & 의미 \\
+    \midrule
+    Offline dataset & 저장된 trajectory와 observation에서 action prediction 성능을 평가한다. \\
+    Simulation benchmark & 시뮬레이터에서 policy를 실행해 success rate와 robustness를 평가한다. \\
+    Real robot & 실제 센서, controller, latency, 물리 접촉을 포함해 task success를 평가한다. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+세 수준은 서로 대체되지 않는다. offline action prediction이 좋아도 closed-loop success가 낮을 수 있고, simulation success가 좋아도 real robot에서는 접촉과 센서 노이즈 때문에 실패할 수 있다. 논문이 어떤 수준의 검증을 했는지 먼저 분리해야 한다.
+
+\subsection{결과}
+
+결과는 숫자로 읽되, 숫자의 조건을 함께 읽어야 한다. 성공률은 다음처럼 조건부 지표이다.
+
+\begin{equation}
+  \mathrm{SR}
+  =
+  \mathrm{SR}
+  (
+  \mathcal{T},
+  \mathcal{E},
+  \mathcal{O},
+  \mathcal{L},
+  \mathcal{R}
+  ),
+\end{equation}
+
+여기서 $\mathcal{T}$는 task set, $\mathcal{E}$는 environment distribution, $\mathcal{O}$는 object set, $\mathcal{L}$은 language distribution, $\mathcal{R}$은 robot platform이다. 단일 숫자로 쓰인 success rate는 이 조건들을 압축한 결과일 뿐이다.
+
+Latency도 마찬가지이다. 모델 forward time만 보고하면 실제 deployment latency를 알 수 없다. end-to-end latency는 센서 입력, 전처리, 모델 추론, decoding, safety filter, controller interface를 포함해야 한다.
+
+\subsection{비교}
+
+비교에서 가장 중요한 것은 baseline의 강도이다. 약한 baseline만 이기면 논문 주장이 과장될 수 있다. VLA 논문에서 baseline은 다음 그룹을 고려해야 한다.
+
+\begin{itemize}
+  \item 같은 데이터로 학습한 기존 VLA
+  \item 같은 action space를 쓰는 diffusion policy 또는 visuomotor policy
+  \item frozen VLM + planner + controller pipeline
+  \item ablation: backbone 고정, action head 변경, data size 변경, chunk length 변경
+\end{itemize}
+
+특히 action representation 논문은 같은 backbone과 같은 데이터에서 action representation만 바꾸는 ablation이 필요하다. Efficient VLA 논문은 같은 success rate에서 latency가 줄었는지, 같은 latency에서 success rate가 올랐는지 분리해서 보여야 한다.
+
+\section{질문 10--12: 의미와 한계를 분리하기}
+
+질문 10--12는 논문 결과를 해석하는 단계이다. 여기서 흔한 오류는 의의를 과장하거나 한계를 future work 한 줄로 처리하는 것이다.
+
+\subsection{의의}
+
+의의는 결과가 가능하게 하는 것을 말한다. VLA 논문에서 의의는 보통 다음 중 하나이다.
+
+\begin{enumerate}
+  \item 더 작은 GPU 또는 더 빠른 제어 주기에서 VLA를 실행할 수 있다.
+  \item 더 다양한 조작 과제에서 language-conditioned policy를 쓸 수 있다.
+  \item action representation을 바꾸어 VLM과 로봇 제어 사이의 mismatch를 줄인다.
+  \item benchmark를 통해 모델 간 비교와 failure diagnosis가 가능해진다.
+  \item reasoning, memory, world model을 통해 long-horizon task로 확장한다.
+\end{enumerate}
+
+의의는 논문이 실제로 검증한 범위를 넘으면 안 된다. simulation만 했다면 real-world deployment 의의는 제한적으로 써야 한다. offline dataset만 했다면 closed-loop robot policy로서의 의의는 보수적으로 써야 한다.
+
+\subsection{한계}
+
+한계는 두 종류로 나누어야 한다. 첫째는 논문이 명시한 한계이다. 둘째는 독자가 근거로부터 도출하는 한계이다. 예를 들어 논문이 ``실제 로봇 실험은 하지 않았다''고 말하면 명시적 한계이다. 논문이 말하지 않았지만 benchmark가 template instruction만 사용했다면, 자연어 일반화가 제한적이라는 도출 한계를 쓸 수 있다.
+
+\begin{warningbox}{한계 작성 원칙}
+한계는 논문을 깎아내리는 문장이 아니라 주장 범위를 정확히 닫는 문장이다. 좋은 한계 분석은 다음 실험을 설계할 수 있게 만든다.
+\end{warningbox}
+
+\subsection{향후 과제}
+
+향후 과제는 ``더 연구해야 한다''가 아니어야 한다. VLA 논문에서 의미 있는 향후 과제는 구체적 실험이나 시스템 확장으로 써야 한다.
+
+\begin{itemize}
+  \item unseen object와 unseen instruction을 분리한 generalization test
+  \item real robot latency와 safety filter를 포함한 deployment benchmark
+  \item 실패 trajectory와 recovery data를 포함한 post-training
+  \item multi-embodiment action representation의 통일
+  \item force/tactile signal을 포함한 contact-rich VLA
+\end{itemize}
+
+\section{질문 13: 공개 자원 확인}
+
+마지막 질문은 공개 자원이다. 공개 자원은 단순 부록이 아니다. VLA는 로봇 플랫폼, controller, dataset split, evaluation script가 복잡하기 때문에 공개 여부가 연구의 검증 가능성을 크게 좌우한다.
+
+공개 자원은 다음 수준으로 나눈다.
+
+\begin{table}[t]
+  \centering
+  \caption{VLA 공개 자원의 수준}
+  \label{tab:resource_levels}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{28mm}X}
+    \toprule
+    수준 & 확인할 내용 \\
+    \midrule
+    Paper only & 논문과 PDF만 있고 재현 코드는 없다. \\
+    Code & 학습 또는 추론 코드가 공개되어 있다. \\
+    Checkpoint & pretrained 또는 fine-tuned model weight가 공개되어 있다. \\
+    Dataset & trajectory, language instruction, split metadata가 공개되어 있다. \\
+    Benchmark & evaluation script, success checker, environment setup이 공개되어 있다. \\
+    Full stack & code, checkpoint, data, benchmark, robot/simulator setup이 함께 제공된다. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+논문 요약에서 ``코드 공개''라고 쓸 때는 실제 URL을 확인해야 한다. GitHub repository가 있어도 empty repository이거나 inference만 있고 training code가 없을 수 있다. Dataset page가 있어도 license가 제한적일 수 있다. 이 책에서는 공개 자원을 평가할 때 링크 존재와 사용 가능성을 구분한다.
+
+\section{13개 질문을 표로 적용하기}
+
+실제 논문을 읽을 때는 다음 표를 채우면 된다.
+
+\begin{table}[t]
+  \centering
+  \caption{13-question reading template}
+  \label{tab:thirteen_template}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{25mm}X}
+    \toprule
+    항목 & 작성 내용 \\
+    \midrule
+    배경 & 분야, task family, deployment context \\
+    문제 & 해결하려는 기능과 평가 가능한 objective \\
+    기존 한계 & 이전 접근의 모듈 수준 병목 \\
+    목표 & 측정 가능한 target metric 또는 system property \\
+    방법 & 입력, 출력, backbone, loss, inference loop \\
+    핵심 아이디어 & contribution mechanism 한 문장 \\
+    검증 & dataset, simulator, robot, scenario \\
+    결과 & metric과 수치, 조건 \\
+    비교 & baseline, ablation, fairness \\
+    의의 & 검증 범위 안에서 가능한 것 \\
+    한계 & 명시 한계와 도출 한계 \\
+    향후 과제 & 다음 실험 또는 시스템 확장 \\
+    자원 공개 & code, data, checkpoint, benchmark 링크 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+이 표는 간단하지만 강력하다. 한 논문을 이 표로 채우지 못하면 보통 두 가지 중 하나이다. 논문 자체가 필요한 정보를 충분히 제공하지 않았거나, 독자가 아직 논문의 핵심을 잡지 못한 것이다.
+
+\section{나쁜 요약과 좋은 요약}
+
+13-question framework는 문장을 길게 만드는 도구가 아니라 근거 없는 요약을 줄이는 도구이다. 예를 들어 OpenVLA-OFT를 다음처럼 요약하면 부족하다.
+
+\begin{warningbox}{Bad summary}
+OpenVLA-OFT는 OpenVLA를 fine-tuning해서 성능을 크게 올린 논문이다. 최신 VLA fine-tuning 방법을 제안했고 LIBERO에서 좋은 결과를 보였다.
+\end{warningbox}
+
+같은 내용을 더 좋은 요약으로 바꾸면 다음과 같다.
+
+\begin{sourcebox}{Good summary}
+OpenVLA-OFT는 같은 OpenVLA base model을 유지한 상태에서 parallel decoding, action chunking, continuous action representation, L1 objective를 결합해 LIBERO 평균 success와 action generation throughput을 함께 개선한 fine-tuning recipe이며, 따라서 contribution은 새 backbone보다 action interface와 adaptation procedure에 있다 \citep{openvlaoft}.
+\end{sourcebox}
+
+좋은 요약은 짧아도 입력, 출력, 바뀐 mechanism, 검증 지표, 주장의 범위를 포함한다. 나쁜 요약은 ``좋다'', ``최신'', ``성능 향상''처럼 검증 조건을 지운다.
+
+\section{리뷰와 연구 기획에서의 사용}
+
+13개 질문은 읽기 도구이지만, 동시에 연구 기획 도구이다. 새 VLA 논문을 쓰기 전에 각 항목을 질문으로 뒤집으면 된다.
+
+\begin{itemize}
+  \item 배경: 독자가 왜 이 문제가 중요한지 바로 납득하는가?
+  \item 문제: 과제가 너무 넓거나 모호하지 않은가?
+  \item 기존 한계: prior work의 한계와 제안 방법이 직접 연결되는가?
+  \item 목표: 목표가 측정 가능하고 검증 가능한가?
+  \item 방법: 입력, 출력, 모듈, 학습/추론 절차가 재현 가능한가?
+  \item 검증: 실험이 contribution을 직접 검증하는가?
+  \item 비교: baseline이 충분히 강한가?
+  \item 한계: reviewer가 찌를 약점을 선제적으로 다루는가?
+\end{itemize}
+
+이 방식은 논문 초안 평가에도 유용하다. 어떤 항목이 비어 있으면 그 부분이 reviewer의 공격 지점이 된다. 특히 VLA 분야에서는 benchmark와 baseline이 약하면 모델 구조가 좋아도 설득력이 급격히 떨어진다.
+
+\section{요약}
+
+VLA 논문을 읽을 때 13개 질문은 배경에서 공개 자원까지 주장을 닫는 도구이다. 이 프레임의 핵심은 방법을 멋지게 요약하는 것이 아니라, 입력과 출력, 학습 신호, 검증 조건, baseline, 실패 모드, 공개 자원을 같은 기준으로 확인하는 데 있다. 이후 장에서는 이 13개 질문을 각 주제별로 적용한다. Action representation 장에서는 질문 5와 6이 중심이 되고, benchmark 장에서는 질문 7--9가 중심이 되며, robustness 장에서는 질문 11과 12가 특히 중요해진다.
+
+\begin{sourcebox}{Key papers for practicing the template}
+\begin{itemize}
+  \item Kim et al. (2024), OpenVLA: architecture, dataset mixture, fine-tuning, 공개 자원을 한 번에 점검하기 좋다.
+  \item Kim, Finn, and Liang (2025), OpenVLA-OFT: 같은 base model에서 fine-tuning recipe가 claim을 어떻게 바꾸는지 보기 좋다.
+  \item Pertsch et al. (2025), FAST: action tokenization claim과 closed-loop evidence를 분리해서 읽는 연습에 적합하다.
+  \item Open X-Embodiment Collaboration (2023), Open X-Embodiment: dataset paper에서 claim, split, embodiment, source 공개를 확인하는 연습에 적합하다.
+  \item Google DeepMind (2025/2026), Gemini Robotics page/report: closed industrial VLA에서 공개되지 않은 정보와 확인 가능한 정보를 구분하는 연습에 적합하다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Basic]}
+같은 논문에 대해 13-question summary와 6-line quick note를 각각 작성하고, 두 형식 중 연구 주제 발굴에 더 도움이 된 항목이 무엇인지 설명하라.
+\end{assignmentbox}

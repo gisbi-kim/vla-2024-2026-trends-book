@@ -1,0 +1,274 @@
+\chapter{Benchmarks and Datasets: VLA 성능은 무엇으로 재는가}
+\label{ch:benchmarks_datasets}
+
+7장에서는 manipulation VLA를 평가할 때 성공률만 보면 안 된다고 했다. 이 장의 핵심은 그 주장을 더 엄밀하게 만드는 것이다. VLA 논문에서 성능 숫자는 dataset, benchmark, robot platform, action space, evaluation protocol에 묶여 있다. 같은 모델이라도 offline imitation loss에서는 좋아 보이고, simulation에서는 중간이고, 실제 로봇에서는 실패할 수 있다. 따라서 2024--2026년 VLA 트렌드를 읽으려면 모델 구조만큼이나 평가 체계를 읽어야 한다.
+
+\section{Benchmark가 정의하는 문제}
+
+Benchmark는 단순한 시험지가 아니다. 어떤 관측을 주고, 어떤 행동을 허용하고, 어떤 성공 조건을 쓰는지에 따라 연구 문제가 달라진다. VLA benchmark는 일반적으로 다음 tuple로 볼 수 있다.
+
+\begin{equation}
+  \mathcal{B}
+  =
+  \left(
+    \mathcal{T},
+    \mathcal{E},
+    \mathcal{O},
+    \mathcal{A},
+    \mathcal{M},
+    \mathcal{P}
+  \right).
+\end{equation}
+
+$\mathcal{T}$는 task set, $\mathcal{E}$는 environment distribution, $\mathcal{O}$는 observation space, $\mathcal{A}$는 action space, $\mathcal{M}$은 metric, $\mathcal{P}$는 evaluation protocol이다. 논문이 ``SOTA를 달성했다''고 말할 때 실제 의미는 이 tuple 안에서의 SOTA이다. $\mathcal{A}$가 end-effector delta pose인지, joint action인지, discrete skill인지에 따라 같은 success rate도 난이도가 달라진다.
+
+Benchmark는 모델의 강점뿐 아니라 연구자들이 보는 세계를 정한다. Pick-and-place 중심 benchmark에서는 object grounding과 grasp pose가 중요해지고, long-horizon household benchmark에서는 subgoal planning과 recovery가 중요해진다. Driving benchmark에서는 temporal prediction과 safety가 중요해지고, embodied QA benchmark에서는 language reasoning이 더 크게 보인다. VLA를 읽을 때는 먼저 benchmark가 어떤 능력을 보상하는지 물어야 한다.
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[node distance=18mm]
+    \node[vlablock] (off) {Offline loss\\action/token prediction};
+    \node[vlablock, right=of off] (sim) {Simulation\\success/safety};
+    \node[vlablock, below=16mm of $(off)!0.5!(sim)$] (real) {Real robot\\closed-loop rollout};
+    \draw[vlaarrow] (off) -- node[above,font=\sffamily\scriptsize]{cheap, broad} (sim);
+    \draw[vlaarrow] (sim) -- node[right,font=\sffamily\scriptsize]{transfer?} (real);
+    \draw[vlaarrow] (real) -- node[left,font=\sffamily\scriptsize]{calibrate} (off);
+  \end{tikzpicture}
+  \caption{Author-created schematic. Evaluation triangle. VLA 성능은 offline loss, simulation, real robot evaluation 사이의 일치와 불일치를 함께 보아야 한다.}
+  \label{fig:evaluation_triangle}
+\end{figure}
+
+\section{Offline dataset과 real-robot evaluation}
+
+VLA 연구는 크게 두 종류의 평가를 사용한다. 첫째는 offline dataset 평가이다. 둘째는 online 또는 real-robot evaluation이다.
+
+\begin{equation}
+  \mathcal{L}_{\mathrm{BC}}
+  =
+  \mathbb{E}_{(o,q,a)\sim\mathcal{D}}
+  \left[
+    \ell
+    \left(
+      \pi_\theta(o,q),
+      a
+    \right)
+  \right].
+\end{equation}
+
+Offline evaluation은 위와 같이 behavior cloning loss, action prediction accuracy, token accuracy, trajectory reconstruction error를 본다. 장점은 빠르고 반복 가능하다는 것이다. 단점은 실제 실행에서 distribution shift가 발생한다는 것이다. Dataset 안에서 expert action을 잘 예측해도, 모델이 한 번 실수해서 다른 state로 들어가면 dataset에는 없는 관측이 나오고 policy가 흔들린다.
+
+Real-robot evaluation은 task success를 직접 측정한다.
+
+\begin{equation}
+  J(\pi_\theta)
+  =
+  \mathbb{E}_{\tau \sim p(\tau \mid \pi_\theta)}
+  \left[
+    R(\tau)
+  \right].
+\end{equation}
+
+여기서 $\tau$는 policy가 실제로 만든 trajectory이고, $R(\tau)$는 성공, 안전성, 시간, 충돌 등을 포함한 return이다. Real-robot 평가는 더 믿을 만하지만 비용이 크고 episode 수가 제한된다. 그래서 논문은 offline 결과와 robot 결과를 함께 보여야 한다. Offline loss가 낮아졌는데 real success가 오르지 않으면, action 표현이나 evaluation target이 실제 제어 성공과 잘 맞지 않는다는 뜻일 수 있다.
+
+\section{대표 dataset 계열}
+
+2024--2026년 VLA 논문은 몇 가지 dataset 계열 위에서 움직인다. 이름을 외우는 것보다 각 dataset이 어떤 실험 주장을 가능하게 하는지 이해하는 것이 중요하다.
+
+\begin{table}[t]
+  \centering
+  \caption{VLA dataset을 읽는 관점}
+  \label{tab:vla_dataset_lenses}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{30mm}p{33mm}X}
+    \toprule
+    Dataset 유형 & 주로 검증하는 주장 & 주의할 점 \\
+    \midrule
+    Multi-robot manipulation & embodiment generalization, data scaling & action space 정규화와 robot별 편향을 확인해야 한다 \\
+    Single-lab real robot & 실제 hardware success, precise control & task와 object 다양성이 제한될 수 있다 \\
+    Simulation manipulation & 대규모 episode, controlled ablation & sim-to-real gap과 contact realism을 확인해야 한다 \\
+    Video-language dataset & world knowledge, affordance prior & action supervision이 없거나 약할 수 있다 \\
+    Human demonstration & natural task strategy, rich variation & teleoperation interface와 demonstrator bias가 크다 \\
+    Synthetic instruction dataset & language variation, compositionality & template bias와 실제 사용자 지시와의 차이를 확인해야 한다 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Open X-Embodiment류 dataset은 여러 로봇과 task를 묶어 generalist policy 학습을 가능하게 한다. 그러나 이 장점은 동시에 해석상의 난점을 만든다. 서로 다른 로봇의 action이 같은 좌표계와 시간 간격으로 정규화되어 있는지, gripper command가 같은 의미인지, camera viewpoint가 얼마나 다른지 확인해야 한다.
+
+반대로 단일 실험실 dataset은 제어와 센서가 정돈되어 있어서 학습이 안정적이다. 하지만 이때 성능은 해당 lab setup에 과적합될 수 있다. 따라서 dataset의 크기보다 중요한 질문은 ``어떤 종류의 변동성을 포함하는가''이다.
+
+\section{Generalization split}
+
+VLA에서 generalization은 하나의 단어로 쓰기에는 너무 넓다. 최소한 다음 축을 분리해야 한다.
+
+\begin{equation}
+  \mathcal{G}
+  =
+  \mathcal{G}_{\mathrm{object}}
+  \times
+  \mathcal{G}_{\mathrm{instruction}}
+  \times
+  \mathcal{G}_{\mathrm{scene}}
+  \times
+  \mathcal{G}_{\mathrm{task}}
+  \times
+  \mathcal{G}_{\mathrm{embodiment}}.
+\end{equation}
+
+Object generalization은 새로운 물체를 다루는 능력이다. Instruction generalization은 새로운 문장 표현을 이해하는 능력이다. Scene generalization은 배치, 조명, 배경, clutter가 달라져도 작동하는 능력이다. Task generalization은 새로운 subgoal 조합이나 새로운 manipulation skill을 수행하는 능력이다. Embodiment generalization은 다른 robot morphology에서 작동하는 능력이다.
+
+논문에서 ``unseen task''라고 쓰면 실제로 무엇이 unseen인지 확인해야 한다. 물체만 새롭고 행동 primitive는 같을 수 있다. 문장만 새롭고 scene은 같을 수 있다. Task template은 같고 색깔만 바뀔 수 있다. 반대로 embodiment까지 바뀌면 action mapping 자체가 달라지므로 난이도가 크게 올라간다.
+
+\section{Metric: 무엇을 숫자로 만들 것인가}
+
+VLA 평가 metric은 크게 prediction metric, execution metric, safety metric, efficiency metric으로 나눌 수 있다.
+
+\begin{table}[t]
+  \centering
+  \caption{VLA 평가 metric의 계층}
+  \label{tab:vla_metrics}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{30mm}p{40mm}X}
+    \toprule
+    Metric 계층 & 예시 & 해석 \\
+    \midrule
+    Prediction & action MSE, token accuracy, negative log-likelihood & dataset action을 얼마나 잘 모사하는지 본다 \\
+    Execution & success rate, completion rate, SPL-like score & 실제 또는 simulated task가 끝까지 성공하는지 본다 \\
+    Safety & collision rate, force violation, workspace violation & 성공과 별개로 위험 행동이 있는지 본다 \\
+    Efficiency & latency, memory, episode time, intervention count & real-time 배포 가능성을 본다 \\
+    Robustness & perturbation success, recovery rate, OOD score & 환경 변화와 실패 후 복구를 본다 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Prediction metric은 학습 과정에서는 중요하지만 최종 결론으로는 부족하다. 특히 multimodal action distribution에서는 expert action이 하나만 정답이 아니다. 물체를 왼쪽에서 잡아도 되고 오른쪽에서 잡아도 되는데, MSE는 두 행동의 평균을 예측하게 만들 수 있다.
+
+\begin{equation}
+  \hat{a}_{\mathrm{MSE}}
+  =
+  \mathbb{E}
+  \left[
+    a \mid o,q
+  \right].
+\end{equation}
+
+이 평균 action은 실제로는 어느 mode에도 속하지 않아 실패할 수 있다. 그래서 diffusion policy, discretized action token, mixture policy, flow policy가 등장한다. Metric도 이에 맞게 mode coverage와 task success를 함께 봐야 한다.
+
+\section{Success rate의 신뢰구간}
+
+Robot evaluation은 episode 수가 작을 때가 많다. $N$번 중 $k$번 성공한 success rate는 $\hat{p}=k/N$이다. 이 값 하나만 보고 모델 차이를 판단하면 위험하다.
+
+\begin{equation}
+  \mathrm{SE}(\hat{p})
+  =
+  \sqrt{
+    \frac{
+      \hat{p}(1-\hat{p})
+    }{N}
+  }.
+\end{equation}
+
+$N=20$인 실험에서 14회 성공과 16회 성공은 각각 70\%와 80\%이다. 숫자로는 10 percentage point 차이지만, 통계적으로는 불확실성이 크다. 따라서 좋은 VLA 논문은 episode 수, seed, confidence interval, task별 breakdown을 제공해야 한다.
+
+Episode 수가 작은 robot experiment에서는 단순 normal approximation만으로 충분하지 않을 수 있다. 따라서 binomial success rate에는 Wilson interval을 쓰거나, task별 episode가 섞인 경우에는 bootstrap confidence interval을 함께 보고하는 편이 더 안전하다. 핵심은 평균 success 하나가 아니라, 그 숫자가 얼마나 불확실한지 독자가 볼 수 있게 하는 것이다.
+
+특히 manipulation에서는 task 난이도가 균등하지 않다. 쉬운 task 80개와 어려운 task 20개를 합쳐 평균을 내면 모델의 한계가 가려질 수 있다. 그래서 aggregate success rate와 함께 per-task, per-object, per-scene 결과가 필요하다.
+
+\section{Benchmark leakage와 overfitting}
+
+VLA는 pretrained VLM을 기반으로 하므로 benchmark leakage 가능성이 있다. 인터넷 이미지, caption, instruction corpus, public benchmark description이 pretraining에 들어갔을 수 있다. Robot trajectory 자체가 없더라도, 물체와 task에 대한 언어-시각 prior가 이미 학습되어 있을 수 있다.
+
+Leakage를 완전히 배제하기는 어렵다. 대신 논문은 다음을 명확히 해야 한다.
+
+\begin{itemize}
+  \item benchmark task와 object가 pretraining corpus에 얼마나 노출되었을 가능성이 있는가.
+  \item evaluation instruction이 training instruction template과 얼마나 다른가.
+  \item hyperparameter를 benchmark test set에 반복적으로 맞추지 않았는가.
+  \item public leaderboard가 있다면 test set이 숨겨져 있는가.
+\end{itemize}
+
+VLA에서 overfitting은 단지 loss overfitting이 아니다. Demonstration style, camera pose, table layout, language template, robot speed, gripper calibration에 대한 overfitting도 포함한다. 논문을 읽을 때 video success가 반복되는 동일 setup에서 나온 것인지, 독립적인 환경 변화에서 나온 것인지 확인해야 한다.
+
+\section{Simulation benchmark의 역할}
+
+Simulation은 대규모 evaluation과 ablation에 유용하다. 실제 로봇에서 1000 episode를 실행하는 것은 비싸지만 simulation에서는 가능하다. 또한 물체 위치, 조명, 질량, 마찰, distractor를 체계적으로 바꿀 수 있다.
+
+\begin{equation}
+  \Delta_{\mathrm{sim2real}}
+  =
+  J_{\mathrm{sim}}(\pi_\theta)
+  -
+  J_{\mathrm{real}}(\pi_\theta).
+\end{equation}
+
+Simulation 결과를 읽을 때는 이 gap을 생각해야 한다. Visual realism이 좋아도 contact dynamics가 부정확하면 manipulation 성능이 과대평가된다. 반대로 simulation이 거칠어도 policy ranking이 real robot ranking과 잘 맞으면 benchmark로 유용할 수 있다. 핵심은 simulation이 실제 물리 세계의 절대 성능을 대신하는지, 아니면 모델 비교와 ablation을 위한 상대 평가인지 구분하는 것이다.
+
+\section{Leaderboard보다 중요한 ablation}
+
+2024--2026년 VLA 논문은 모델 이름과 benchmark score를 크게 보여주는 경향이 있다. 그러나 연구자로서 더 중요한 것은 ablation이다. Ablation은 성능이 어디서 오는지 밝힌다.
+
+\begin{equation}
+  \Delta J_i
+  =
+  J(\pi_{\mathrm{full}})
+  -
+  J(\pi_{\setminus i}).
+\end{equation}
+
+$i$는 vision encoder, language backbone, action tokenizer, data mixture, fine-tuning method, temporal context, diffusion step, controller module일 수 있다. 좋은 ablation은 단일 요소를 제거했을 때 전체 성능이 얼마나 변하는지 보여준다. 나쁜 ablation은 서로 여러 요소가 동시에 바뀌어 해석이 어렵다.
+
+VLA에서 특히 필요한 ablation은 다음과 같다.
+
+\begin{enumerate}
+  \item language를 제거하거나 template instruction으로 바꿨을 때 성능.
+  \item visual pretraining backbone을 바꿨을 때 성능.
+  \item action representation을 continuous, discrete, diffusion으로 바꿨을 때 성능.
+  \item robot data mixture 비율을 바꿨을 때 성능.
+  \item latency를 줄였을 때 success가 얼마나 유지되는지.
+  \item low-level controller 또는 planner를 바꿨을 때 성능.
+\end{enumerate}
+
+이 ablation이 있어야 VLA가 실제로 language와 vision을 사용해 행동을 만든 것인지, 아니면 controller와 dataset prior가 대부분을 해결했는지 판단할 수 있다.
+
+\section{데이터셋 문서를 읽는 체크리스트}
+
+Dataset 논문이나 benchmark 논문은 모델 논문보다 덜 화려할 수 있지만, VLA 분야에서는 매우 중요하다. 좋은 dataset 문서는 다음 정보를 포함해야 한다.
+
+\begin{itemize}
+  \item robot platform, sensor, controller, calibration 절차.
+  \item task taxonomy와 instruction 생성 방식.
+  \item episode 수, 성공/실패 trajectory 비율, teleoperation 방식.
+  \item action frequency, coordinate frame, gripper command 정의.
+  \item train/validation/test split과 OOD split.
+  \item license, privacy, safety, data quality filtering.
+  \item baseline model과 재현 가능한 evaluation script.
+\end{itemize}
+
+특히 action coordinate frame은 반드시 확인해야 한다. End-effector delta가 camera frame인지, robot base frame인지, world frame인지에 따라 학습 문제가 달라진다.
+
+\begin{equation}
+  \Delta p^{\mathrm{base}}
+  =
+  R_{\mathrm{cam}}^{\mathrm{base}}
+  \Delta p^{\mathrm{cam}}.
+\end{equation}
+
+Frame 정의가 애매하면 다른 연구자가 같은 모델을 재현하기 어렵다. VLA benchmark에서 재현성은 code 공개만으로 충분하지 않고, data schema와 evaluation environment가 함께 공개되어야 한다.
+
+\section{요약}
+
+VLA 성능은 모델 하나의 고유한 숫자가 아니라 benchmark tuple 위에서 정의되는 조건부 숫자이다. Offline loss, simulation success, real-robot success, safety, latency, robustness는 서로 다른 질문에 답한다. 2024--2026년 VLA 논문을 비교할 때는 ``어느 모델이 더 높은가''보다 ``무엇을 같은 조건에서 비교했는가''를 먼저 확인해야 한다.
+
+다음 장에서는 benchmark score만으로는 포착하기 어려운 reasoning 문제를 다룬다. Manipulation과 benchmark가 실행 가능성을 묻는다면, reasoning VLA는 로봇이 지시를 분해하고 상황을 판단하며 실패를 설명하고 재계획할 수 있는지를 묻는다.
+
+\begin{sourcebox}{Key papers}
+\begin{itemize}
+  \item Open X-Embodiment Collaboration (2023), Open X-Embodiment/RT-X: 1M+ real robot trajectories와 22 robot embodiments를 통해 multi-embodiment dataset scaling을 논한다.
+  \item Liu et al. (2024), LIBERO: language-conditioned manipulation benchmark에서 task suite와 generalization split을 읽는 기준을 제공한다.
+  \item RoboTwin 2.0 계열 논문: simulation data generation과 bimanual manipulation evaluation을 연결하는 최신 benchmark 사례이다.
+  \item Kim, Finn, and Liang (2025), OpenVLA-OFT: LIBERO 평균 success와 real-world evaluation을 함께 보고하므로 benchmark transfer를 토론하기 좋다.
+  \item SimplerEnv 계열 benchmark: simulation-to-real ranking validity를 점검할 때 참고할 수 있다.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Intermediate]}
+Open X-Embodiment, LIBERO, RoboTwin 2.0 중 하나를 골라 benchmark tuple \((\mathcal{T}, \mathcal{E}, \mathcal{O}, \mathcal{A}, \mathcal{M}, \mathcal{P})\)을 채우고, 숨은 confound를 3개 이상 적어라.
+\end{assignmentbox}

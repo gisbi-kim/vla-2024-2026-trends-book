@@ -1,0 +1,84 @@
+\documentclass[11pt,a4paper,openany,twoside]{book}
+
+\usepackage{styles/vlabook}
+
+\title{Introduction to Vision-Language-Action Models\\and Their Trends (2024--2026)}
+\author{Director: Giseop Kim (gsk@dgist.ac.kr)}
+\date{Draft v0.4 \\ 2026년 5월}
+
+\begin{document}
+
+\frontmatter
+\begin{titlepage}
+  \centering
+  \vspace*{22mm}
+  {\sffamily\bfseries\Huge Introduction to\\Vision-Language-Action Models\par}
+  \vspace{4mm}
+  {\sffamily\bfseries\LARGE and Their Trends (2024--2026)\par}
+  \vspace{10mm}
+  {\Large From OpenVLA-Style Fine-Tuning to Efficient, Robust,\\and Generalist Robot Policies\par}
+  \vspace{14mm}
+  \begin{tikzpicture}[node distance=6mm, transform shape, scale=0.92]
+    \node[vlablock, minimum width=30mm] (vla) {VLA Stack};
+    \node[vlablock, below left=of vla, minimum width=30mm] (act) {Action\\Representation};
+    \node[vlablock, below=of vla, minimum width=30mm] (ft) {Fine-tuning\\and Efficiency};
+    \node[vlablock, below right=of vla, minimum width=30mm] (eval) {Benchmark\\and Safety};
+    \node[vlablock, below=of ft, minimum width=30mm] (front) {2025--2026\\Emerging Fronts};
+    \draw[vlaarrow] (vla) -- (act);
+    \draw[vlaarrow] (vla) -- (ft);
+    \draw[vlaarrow] (vla) -- (eval);
+    \draw[vlaarrow] (act) -- (front);
+    \draw[vlaarrow] (ft) -- (front);
+    \draw[vlaarrow] (eval) -- (front);
+  \end{tikzpicture}
+  \vfill
+  {\large Director: Giseop Kim (gsk@dgist.ac.kr)\par}
+  \vspace{2mm}
+  {\large Draft v0.4, 2026년 5월\par}
+\end{titlepage}
+
+\chapter*{Preface}
+이 책은 VLM을 이미 알고 있는 공학계 독자가 VLA(Vision-Language-Action) 모델의 구조와 2024--2026년 연구 흐름을 수업 수준으로 정리할 수 있도록 쓰는 미니북이다. 목표는 모델 이름을 나열하는 것이 아니라, VLA가 실제 로봇 정책이 되기 위해 필요한 행동 표현, 학습 절차, 실시간성, 벤치마크, 안전성의 기술적 조건을 정식화하고 비교하는 것이다. 이 책은 exhaustive survey가 아니라 reading-oriented mini-book이며, 각 장의 key papers는 분야 전체를 대표하는 완전 목록이 아니라 해당 기술 병목을 설명하기 위한 anchor이다. v0.4에서는 References와 annotated catalog를 분리하고, appendix/table layout, emerging-front evidence wording, industrial VLA worked example, assignment difficulty tags를 정리했다.
+
+\chapter*{Notation and Terminology}
+이 책에서 fine-tuning은 pretrained VLA를 특정 로봇, 과제, action space에 맞추는 지도학습 기반 적응을 뜻한다. Post-training은 fine-tuning 이후 success feedback, verifier, preference, correction signal 등을 이용해 실행 품질을 추가로 보정하는 절차를 뜻한다. Action chunking은 여러 timestep의 행동을 한 번에 생성하는 기법이고, action chunk는 그 출력 단위이다. Controller interface는 VLA 출력이 실제 low-level controller에 전달되는 좌표계, 주기, 제약, safety filter를 포함하는 실행 계약이다. 본문에서 2026년 흐름은 확정된 consensus가 아니라 2025--2026년에 관측되는 emerging research fronts로 읽어야 한다.
+
+\tableofcontents
+
+\mainmatter
+\part{What is VLA?}
+\include{chapters/ch01_why_vla}
+\include{chapters/ch02_vla_architecture}
+\include{chapters/ch03_reading_framework}
+\part{Core Bottlenecks}
+\include{chapters/ch04_action_representation}
+\include{chapters/ch05_finetuning_posttraining}
+\include{chapters/ch06_efficient_vla}
+\part{Evaluation in the Physical World}
+\include{chapters/ch07_manipulation}
+\include{chapters/ch08_benchmarks_datasets}
+\include{chapters/ch09_reasoning_vla}
+\include{chapters/ch10_world_models_simulation}
+\include{chapters/ch11_robustness_safety}
+\part{Generalist and Cross-Domain VLA}
+\include{chapters/ch12_beyond_manipulation}
+\include{chapters/ch13_trend_map_2024_2026}
+\part{Research Practice}
+\include{chapters/ch14_research_topic_selection}
+\include{chapters/ch15_paper_reading_practice}
+
+\appendix
+\part{Appendices}
+\include{appendices/appA_reading_catalog}
+\include{appendices/appB_evidence_ladder}
+\include{appendices/appC_glossary}
+
+\backmatter
+\chapter*{Bibliographic Note}
+이 원고는 2024--2026년 VLA 및 robot foundation model 관련 논문군을 기반으로 구성한 강의용 미니북이다. 상위 폴더의 \texttt{01\_pdfs}, \texttt{02\_summaries}, \texttt{03\_citation\_survey}에는 원문 PDF, 13-question 요약, Google Scholar 인용 조사 결과를 분리해 두었으며, 본문은 이를 수업용 개념 구조와 연구 주제 선정 절차로 재구성한 것이다. 각 장의 key papers는 장별 reading anchor이고, full metadata와 source status는 References와 Appendix의 reading catalog에 정리했다.
+
+\nocite{saycan,rt1,rt2,palme,diffusionpolicy,aloha,openx,libero,octo,openvla,pi0,pi05,openvlaoft,fast,vqvla,smolvla,grootn1,helix,geminirobotics,geminiroboticser,worldvla,vlaos,robotwin2}
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
