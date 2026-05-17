@@ -1,30 +1,30 @@
 # Introduction to Vision-Language-Action Models and Their Trends (2024--2026)
 
-이 저장소는 VLA(Vision-Language-Action) 모델의 2024--2026년 연구 흐름을 정리한 한국어 미니북과, 그 배경이 된 OpenVLA-OFT 인용 논문 조사 자료를 함께 보관한다.
+이 저장소는 VLA(Vision-Language-Action) 모델의 2024--2026년 연구 흐름을 정리한 한국어 책과, 그 배경이 된 OpenVLA-OFT 인용 논문 조사 자료를 함께 보관한다.
 
 ## 저장소 제목
 
-권장 repo 이름은 `vla-trends-mini-book-2024-2026`이다.
+권장 repo 이름은 `vla-trends-book-2024-2026`이다.
 
 짧고 명확하며, 아래 세 가지를 모두 담는다.
 
-- VLA trend mini-book
+- VLA trend book
 - 2024--2026 연구 흐름
 - OpenVLA-OFT 인용 논문 조사 기반 자료
 
 ## 기준 논문
 
-이 미니북과 인용 조사의 출발점은 다음 논문이다.
+이 책과 인용 조사의 출발점은 다음 논문이다.
 
 > Moo Jin Kim, Chelsea Finn, Percy Liang, **Fine-Tuning Vision-Language-Action Models: Optimizing Speed and Success**, arXiv:2502.19645, 2025.
 
-이 논문은 OpenVLA-style VLA fine-tuning에서 action decoding, continuous action representation, action chunking, L1 objective, throughput/success trade-off를 다룬다. 본 저장소의 citation survey는 이 논문을 Google Scholar에서 인용한 논문군을 수집하고, 그 흐름을 VLA mini-book의 근거 자료로 정리한 것이다.
+이 논문은 OpenVLA-style VLA fine-tuning에서 action decoding, continuous action representation, action chunking, L1 objective, throughput/success trade-off를 다룬다. 본 저장소의 citation survey는 이 논문을 Google Scholar에서 인용한 논문군을 수집하고, 그 흐름을 VLA book의 근거 자료로 정리한 것이다.
 
 ## 포함 자료
 
 ```text
 book/
-  main.pdf                         # 최종 빌드된 미니북 PDF
+  main.pdf                         # 최종 빌드된 책 PDF
   main.tex                         # LaTeX main
   references.bib                   # citation-only bibliography
   chapters/                        # 장별 tex 파일
@@ -55,7 +55,7 @@ scripts/
 
 최종 PDF는 다음 파일이다.
 
-[![PDF 바로 다운로드](https://img.shields.io/badge/PDF-%EB%B0%94%EB%A1%9C%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-blue?style=for-the-badge&logo=adobeacrobatreader)](https://github.com/gisbi-kim/vla-trends-mini-book-2024-2026/raw/main/book/main.pdf)
+[![PDF 바로 다운로드](https://img.shields.io/badge/PDF-%EB%B0%94%EB%A1%9C%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-blue?style=for-the-badge&logo=adobeacrobatreader)](https://github.com/gisbi-kim/vla-trends-book-2024-2026/raw/main/book/main.pdf)
 
 - `book/main.pdf`
 
@@ -63,7 +63,7 @@ scripts/
 
 > Director: Giseop Kim (gsk@dgist.ac.kr)
 
-## 미니북 구성
+## 책 구성
 
 책은 다음 흐름으로 구성되어 있다.
 
@@ -86,7 +86,7 @@ scripts/
 - `google_scholar_citing_papers.csv`: CSV 형태의 인용 논문 목록
 - `collection_summary_complete.json`: 수집 요약
 
-이 자료는 “이 미니북이 어떤 논문 흐름을 긁어서 만든 것인지”를 설명하기 위한 근거 자료이다. Google Scholar 화면 상태와 접근 제한 때문에 결과는 특정 수집 시점의 snapshot으로 봐야 한다.
+이 자료는 “이 책이 어떤 논문 흐름을 긁어서 만든 것인지”를 설명하기 위한 근거 자료이다. Google Scholar 화면 상태와 접근 제한 때문에 결과는 특정 수집 시점의 snapshot으로 봐야 한다.
 
 ## 13-question 요약
 
@@ -130,7 +130,7 @@ docker run --rm -v "C:\path\to\repo\book:/work" -w /work vla-trends-tex:latest l
 
 - 논문 PDF 저작권과 재배포 조건이 논문별로 다르다.
 - GitHub 저장소 용량이 불필요하게 커진다.
-- 이 저장소의 목적은 원문 재배포가 아니라, citation survey metadata, 요약, 미니북 원고를 보존하는 것이다.
+- 이 저장소의 목적은 원문 재배포가 아니라, citation survey metadata, 요약, 책 원고를 보존하는 것이다.
 
 ## 라이선스
 
