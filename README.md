@@ -1,6 +1,14 @@
 # Introduction to Vision-Language-Action Models and Their Trends (2024--2026)
 
-이 저장소는 VLA(Vision-Language-Action) 모델의 2024--2026년 연구 흐름을 정리한 한국어 책과, 그 배경이 된 OpenVLA-OFT 인용 논문 조사 자료를 함께 보관한다.
+이 저장소는 VLA(Vision-Language-Action) 모델의 2024--2026년 연구 흐름을 정리한 한국어 책과, 그 배경이 된 OpenVLA-OFT 인용 논문 조사 자료를 함께 보관한다. VLM을 이미 알고 있는 공학계 독자가 VLA를 단순 모델명 목록이 아니라 action representation, fine-tuning, latency, benchmark, safety, evidence level의 관점에서 읽도록 돕는 것이 목표다.
+
+먼저 `book/main.pdf`를 읽고, 필요하면 `citation_survey/`의 Excel과 CSV/JSON 파일로 어떤 논문 흐름을 근거로 삼았는지 확인하면 된다. 개별 논문 PDF 원문 묶음은 저작권과 저장소 용량 문제 때문에 포함하지 않는다.
+
+## 바로가기
+
+[![PDF 브라우저에서 보기](https://img.shields.io/badge/PDF-%EB%B8%8C%EB%9D%BC%EC%9A%B0%EC%A0%80%EC%97%90%EC%84%9C%20%EB%B3%B4%EA%B8%B0-111111?style=for-the-badge&logo=github)](https://github.com/gisbi-kim/vla-2024-2026-trends-book/blob/main/book/main.pdf)
+[![PDF 바로 다운로드](https://img.shields.io/badge/PDF-%EB%B0%94%EB%A1%9C%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-blue?style=for-the-badge&logo=adobeacrobatreader)](https://github.com/gisbi-kim/vla-2024-2026-trends-book/raw/main/book/main.pdf)
+[![Citation survey Excel](https://img.shields.io/badge/Excel-citation%20survey-217346?style=for-the-badge&logo=microsoftexcel)](https://github.com/gisbi-kim/vla-2024-2026-trends-book/blob/main/citation_survey/openvla_oft_google_scholar_citation_survey_complete.xlsx)
 
 ## 저장소 제목
 
@@ -55,6 +63,7 @@ scripts/
 
 최종 PDF는 다음 파일이다.
 
+[![PDF 브라우저에서 보기](https://img.shields.io/badge/PDF-%EB%B8%8C%EB%9D%BC%EC%9A%B0%EC%A0%80%EC%97%90%EC%84%9C%20%EB%B3%B4%EA%B8%B0-111111?style=for-the-badge&logo=github)](https://github.com/gisbi-kim/vla-2024-2026-trends-book/blob/main/book/main.pdf)
 [![PDF 바로 다운로드](https://img.shields.io/badge/PDF-%EB%B0%94%EB%A1%9C%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-blue?style=for-the-badge&logo=adobeacrobatreader)](https://github.com/gisbi-kim/vla-2024-2026-trends-book/raw/main/book/main.pdf)
 
 - `book/main.pdf`
@@ -79,6 +88,8 @@ scripts/
 ## 인용 조사 자료 설명
 
 `citation_survey/`의 Excel 파일은 OpenVLA-OFT 논문을 인용한 Google Scholar 논문군을 정리한 것이다.
+
+> **주의:** 이 citation survey는 Google Scholar 접근 가능 화면을 기준으로 만든 수집 시점의 snapshot이다. Scholar의 접근 제한, 지역/로그인 상태, 중복 cluster, 색인 지연 때문에 완전한 전수 목록이나 영구적으로 재현되는 정답 목록으로 보아서는 안 된다.
 
 - `complete.xlsx`: 전체 인용 조사 결과 워크북
 - `partial.xlsx`: 중간 수집 또는 부분 결과 보존본
