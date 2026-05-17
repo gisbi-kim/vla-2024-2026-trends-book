@@ -4,7 +4,7 @@
 
 ## 저장소 제목
 
-권장 repo 이름은 `vla-trends-book-2024-2026`이다.
+권장 repo 이름은 `vla-2024-2026-trends-book`이다.
 
 짧고 명확하며, 아래 세 가지를 모두 담는다.
 
@@ -55,7 +55,7 @@ scripts/
 
 최종 PDF는 다음 파일이다.
 
-[![PDF 바로 다운로드](https://img.shields.io/badge/PDF-%EB%B0%94%EB%A1%9C%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-blue?style=for-the-badge&logo=adobeacrobatreader)](https://github.com/gisbi-kim/vla-trends-book-2024-2026/raw/main/book/main.pdf)
+[![PDF 바로 다운로드](https://img.shields.io/badge/PDF-%EB%B0%94%EB%A1%9C%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-blue?style=for-the-badge&logo=adobeacrobatreader)](https://github.com/gisbi-kim/vla-2024-2026-trends-book/raw/main/book/main.pdf)
 
 - `book/main.pdf`
 
