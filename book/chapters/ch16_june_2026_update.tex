@@ -1,0 +1,198 @@
+\chapter{June 2026 Update: World-Action Models, Self-Improving VLA, and Safety Diagnostics}
+\label{ch:june_2026_update}
+
+이 장은 2026년 6월 27일 기준 arXiv 업데이트를 기존 장 구조에 연결하기 위한 보완 장이다. 목적은 최신 논문 이름을 길게 나열하는 것이 아니라, 4장 action representation, 5장 fine-tuning/post-training, 6장 efficiency, 8장 benchmark, 10장 world model, 11장 safety, 12장 cross-domain embodiment, 13장 trend map이 어떤 방향으로 수정되어야 하는지 정리하는 것이다.
+
+\section{업데이트의 핵심 판단}
+
+2026년 6월 업데이트에서 가장 큰 변화는 VLA 연구가 ``더 큰 robot policy''에서 ``예측, 적응, 진단을 포함하는 실행 시스템''으로 이동했다는 점이다. 2025년까지의 핵심 질문이 action token, chunking, flow policy, fine-tuning recipe였다면, 2026년 6월의 핵심 질문은 다음처럼 바뀐다.
+
+\begin{enumerate}
+  \item World-action model은 VLA의 보조 모듈이 아니라, policy evaluation, continual learning, failure detection, safety diagnosis까지 연결되는 별도 연구 축이 되었다.
+  \item Post-training은 offline fine-tuning 이후의 작은 보정이 아니라, online adaptation, self-distillation, RL fine-tuning, recovery data collection을 포함하는 실행 후 학습 루프로 확장되고 있다.
+  \item Efficiency는 단순 token pruning이나 작은 backbone 문제가 아니라, asynchronous control, fast-slow hierarchy, delayed observation compensation, action chunk stitching까지 포함한다.
+  \item Safety는 prompt-level refusal나 마지막 단계 filter가 아니라, physical feasibility, process-level risk, failure onset detection, provenance/watermark까지 포함하는 diagnostic protocol로 재정의되고 있다.
+  \item VLA의 적용 영역은 household manipulation 중심에서 scientific laboratory, medical navigation, autonomous driving, humanoid loco-manipulation, multimodal sensing으로 확장되고 있다.
+\end{enumerate}
+
+따라서 이 책의 v0.5 이후 목차는 ``VLA 모델 자체''보다 ``VLA를 실제 로봇 시스템으로 만드는 주변 계약''을 더 강하게 드러내야 한다.
+
+\section{기존 장별 보완 포인트}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{2026년 6월 arXiv 업데이트를 기존 장에 반영하는 위치}
+  \label{tab:june2026_chapter_patch_map}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{20mm}p{36mm}X}
+    \toprule
+    장 & 보완 축 & 반영할 변화 \\
+    \midrule
+    Ch04 & Action representation & LA4VLA, NAC, EquiVLA, Co-VLA류 흐름은 action을 단순 output variable이 아니라 language-action prior, neural codec, equivariant trajectory, multi-arm coordination으로 다루기 시작했다. \\
+    Ch05 & Post-training & ROAD-VLA, FORCE, RECALL, HiL-ResRL류 흐름은 sparse outcome, residual RL, self-distillation, recovery experience를 VLA adaptation의 중심 신호로 올린다. \\
+    Ch06 & Efficiency & Action ControlNet, UniFS, AHA-WAM은 latency를 ``모델 호출 시간''이 아니라 stale observation, asynchronous handoff, fast/slow feature coupling 문제로 다룬다. \\
+    Ch08 & Benchmark & LIBERO-Safety, ForesightSafety-VLA, Act2Answer는 success rate 이후의 benchmark가 safety cost, risk exposure time, knowledge retention, process diagnostics를 측정해야 함을 보여준다. \\
+    Ch10 & World model & World Pilot, LaWAM, AHA-WAM, OSCAR, Cosmos 3는 world model을 future video generator가 아니라 action prior, policy evaluator, latent planner, replay generator로 재배치한다. \\
+    Ch11 & Safety & PhysReflect-VLA, Foresight, watermark/attack 논문군은 runtime feasibility, failure detection, provenance, integrity를 safety 장의 핵심 항목으로 추가하게 만든다. \\
+    Ch12 & Cross-domain & LabVLA, MuseVLA, ACE-Ego-0, humanoid/WAM 논문군은 VLA가 household tabletop에서 domain-specific lab, multimodal sensing, human-egocentric pretraining, whole-body embodiment로 확장됨을 보여준다. \\
+    Ch13 & Trend map & 2026년 중반의 trend map은 WAM, self-improving adaptation, diagnostic safety, cross-embodiment data engine을 독립 축으로 올려야 한다. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{World-action model의 독립}
+
+10장에서는 world model을 ``행동 전에 미래를 예측하는 장치''로 설명했다. 2026년 6월 arXiv 흐름은 이 설명을 더 구체화한다. World-action model(WAM)은 이제 다음 네 역할로 나뉜다.
+
+\begin{equation}
+  \mathrm{WAM}
+  =
+  \{\mathrm{prior}, \mathrm{planner}, \mathrm{evaluator}, \mathrm{replay\ generator}\}.
+\end{equation}
+
+World Pilot은 WAM prior를 VLA decision chain에 넣어 latent steering과 action steering을 수행한다 \citep{worldpilot2026}. LaWAM은 pixel-space future video 대신 compact latent visual subgoal을 사용해 dynamics-aware control을 저지연으로 연결한다 \citep{lawam2026}. AHA-WAM은 world branch와 action branch의 시간 주기를 분리해 low-frequency world context와 high-frequency closed-loop action을 결합한다 \citep{ahawam2026}. OSCAR와 Cosmos 3는 action-conditioned generated world를 policy evaluation과 physical AI backbone으로 확장한다 \citep{oscar2026,cosmos3}.
+
+이 흐름은 10장의 핵심 문장을 강화한다. 좋은 WAM은 미래 이미지를 그럴듯하게 만드는 모델이 아니라, 어떤 행동 후보가 더 안전하고 성공 가능성이 높은지 구분하는 모델이다.
+
+\begin{equation}
+  \mathrm{WAM\ utility}
+  \not\equiv
+  \mathrm{video\ quality};
+  \qquad
+  \mathrm{WAM\ utility}
+  \approx
+  \Delta\mathrm{success}
+  +
+  \Delta\mathrm{safety}
+  -
+  \Delta\mathrm{latency}.
+\end{equation}
+
+또 하나의 변화는 continual learning이다. REGEN은 WAM의 future generation을 recurrent generative replay로 사용해 이전 demonstration을 저장하지 않고도 forgetting을 줄이는 방향을 제시한다 \citep{regenwam2026}. 이는 WAM을 planning 도구에서 memory/data engine으로 확장한다.
+
+\section{Post-training이 online adaptation으로 이동한다}
+
+5장에서는 fine-tuning과 post-training을 구분했다. 2026년 6월 업데이트 이후에는 post-training을 다음처럼 더 명확히 봐야 한다.
+
+\begin{equation}
+  \mathrm{PostTraining}
+  =
+  \mathrm{offline\ adaptation}
+  +
+  \mathrm{online\ feedback}
+  +
+  \mathrm{recovery\ memory}
+  +
+  \mathrm{safety\ diagnostics}.
+\end{equation}
+
+ROAD-VLA는 sparse reward를 action-token logit perturbation 기반 self-distillation으로 바꾸어 dense token-level supervision으로 만든다 \citep{roadvla2026}. FORCE는 RL fine-tuning이 suboptimal imitation ceiling을 넘으려면 value-calibrated warm-up과 self-distillation이 필요하다고 주장한다 \citep{forcevla2026}. RECALL류 recovery collection은 실패 후 복구 경험 자체를 active lifelong learning의 데이터로 본다.
+
+이 변화는 5장의 ``post-training은 fine-tuning 이후의 보정''이라는 설명을 넘어선다. 실제 로봇에서는 성공/실패, intervention, recovery, unsafe near-miss가 모두 다음 업데이트의 감독 신호가 된다. 즉 VLA post-training은 점점 data engine과 deployment logging의 문제로 이동한다.
+
+\section{Efficiency는 asynchronous execution 문제다}
+
+6장은 latency budget을 강조했다. 2026년 6월 논문군은 이 budget을 더 세분화한다. 문제는 모델이 느린 것만이 아니다. 모델이 다음 action chunk를 계산하는 동안 로봇은 이미 움직이고 있으므로, 새 chunk는 stale observation에서 나온다.
+
+\begin{equation}
+  o_{t-\Delta}
+  \xrightarrow{\pi_\theta}
+  a_{t:t+K},
+  \qquad
+  \Delta > 0.
+\end{equation}
+
+Action ControlNet은 이 지연을 action suffix와 residual condition으로 보정하는 lightweight adapter를 제안한다 \citep{actioncontrolnet2026}. UniFS는 high-frequency action expert와 low-frequency vision-language context 사이의 frequency dilemma를 multi-timescale feature coupling으로 다룬다 \citep{unifs2026}. AHA-WAM도 world branch와 action branch의 시간 주기를 비동기화한다 \citep{ahawam2026}.
+
+따라서 efficiency 장의 다음 개정에서는 latency를 다음 세 가지로 분리해야 한다.
+
+\begin{table}[t]
+  \centering
+  \caption{Efficiency를 다시 나누는 세 가지 시간 문제}
+  \label{tab:june2026_efficiency_split}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{30mm}X}
+    \toprule
+    시간 문제 & 설명 \\
+    \midrule
+    Compute latency & Backbone, action head, denoising step, token count 때문에 생기는 계산 지연. \\
+    Observation staleness & Inference 중 로봇 상태가 바뀌어 입력 관측과 실행 시점이 어긋나는 문제. \\
+    Handoff discontinuity & 이전 action chunk와 다음 action chunk가 부드럽게 이어지지 않아 jitter와 contact failure가 생기는 문제. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Safety는 diagnostic benchmark로 이동한다}
+
+11장 safety는 이제 ``위험한 지시를 거절한다''보다 훨씬 넓어야 한다. LIBERO-Safety는 physical safety와 semantic safety를 benchmark로 만들고, ForesightSafety-VLA는 scene structure, language command, visual observation variation을 나누어 safety failure source를 진단한다 \citep{liberosafety2026,foresightsafety2026}. Foresight는 action-conditioned world model latent를 사용해 long-horizon manipulation failure를 조기에 감지한다 \citep{foresight2026}. PhysReflect-VLA는 physical feasibility와 self-reflection을 실행 루프에 넣는다 \citep{physreflectvla2026}. Watermark for VLA and WAM은 deployed black-box policy의 provenance와 IP verification 문제를 제기한다 \citep{vlawatermark2026}.
+
+이 흐름을 반영하면 VLA safety는 다음 네 계층으로 읽어야 한다.
+
+\begin{equation}
+  \mathrm{Safety}
+  =
+  \mathrm{semantic}
+  +
+  \mathrm{physical}
+  +
+  \mathrm{diagnostic}
+  +
+  \mathrm{provenance}.
+\end{equation}
+
+Semantic safety는 지시와 목표의 위험성을 다루고, physical safety는 충돌, 힘, 접촉, reachability를 다룬다. Diagnostic safety는 실패가 언제 시작되었는지, 어떤 관측/언어/구조 변화가 원인인지 분해한다. Provenance safety는 배포된 policy가 누구의 모델인지, 변조되었는지, black-box service가 신뢰 가능한지를 다룬다.
+
+\section{Cross-domain VLA의 확장}
+
+12장은 manipulation 너머의 VLA를 다뤘다. 2026년 6월 업데이트에서는 cross-domain 확장이 더 선명해진다. LabVLA는 scientific laboratory를 별도 domain으로 잡고, protocol, instrument, transparent liquid, fixed workflow 같은 실험실 고유 조건을 VLA 문제로 만든다 \citep{labvla2026}. MuseVLA는 RGB-only VLA에서 벗어나 temperature, audio, radar 같은 on-demand sensing을 tool-call처럼 사용한다 \citep{musevla2026}. ACE-Ego-0은 egocentric human video를 pseudo-action trajectory로 변환해 robot pretraining에 넣는다 \citep{aceego2026}. LA4VLA는 visual observation 없이 language-action pretraining을 먼저 수행해 visual shortcut 의존성을 줄이려 한다 \citep{la4vla2026}. EquiVLA는 rotational equivariance를 VLA action pipeline에 명시적으로 넣어 geometry generalization을 다룬다 \citep{equivla2026}.
+
+이 흐름은 VLA가 단순히 ``카메라와 언어로 로봇팔을 움직이는 모델''이 아니라 다음 조건을 맞추는 general embodied interface로 넓어지고 있음을 보여준다.
+
+\begin{itemize}
+  \item domain protocol: 실험실, 병원, 운전, 가사, 공장처럼 행동 절차가 다른 환경
+  \item sensor contract: RGB, depth, tactile, audio, thermal, radar처럼 관측 양식이 다른 환경
+  \item embodiment contract: single arm, dual arm, dexterous hand, humanoid, vehicle처럼 action space가 다른 환경
+  \item data contract: robot demonstration, simulation, egocentric human video, language-action annotation처럼 supervision source가 다른 환경
+\end{itemize}
+
+\section{새로운 trend map}
+
+13장의 trend map은 v0.5 이후 다음 네 축을 추가해야 한다.
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{2026년 6월 이후 추가해야 할 trend axes}
+  \label{tab:june2026_new_trend_axes}
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{33mm}p{42mm}X}
+    \toprule
+    새 trend axis & 대표 anchor & 핵심 질문 \\
+    \midrule
+    WAM as execution infrastructure & World Pilot, LaWAM, AHA-WAM, REGEN & WAM이 future prediction을 넘어 policy steering, evaluation, replay, safety에 실제 이득을 주는가? \\
+    Self-improving VLA & ROAD-VLA, FORCE, RECALL & sparse success/failure feedback을 action-level supervision으로 바꿀 수 있는가? \\
+    Diagnostic safety & LIBERO-Safety, ForesightSafety-VLA, Foresight, PhysReflect-VLA & success rate 뒤에 숨은 unsafe success, risk exposure, failure onset을 측정하는가? \\
+    Cross-domain data engines & LabVLA, MuseVLA, ACE-Ego-0, LA4VLA & 도메인별 protocol, sensor, embodiment, data source 차이를 하나의 VLA 학습 계약으로 묶는가? \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{요약}
+
+2026년 6월 업데이트의 결론은 명확하다. VLA의 최신 동향은 더 큰 backbone 경쟁만으로 설명되지 않는다. 연구의 무게중심은 action-conditioned world modeling, online adaptation, asynchronous control, diagnostic safety, domain-specific data engine으로 이동하고 있다. 따라서 이 책의 다음 개정은 각 장을 다음 문장으로 연결해야 한다.
+
+\begin{quote}
+VLA는 vision-language prior를 action으로 바꾸는 모델이지만, 실제 로봇 시스템에서는 world model, post-training loop, latency contract, safety diagnostic, data engine까지 포함하는 실행 계약이다.
+\end{quote}
+
+\begin{sourcebox}{June 2026 arXiv anchors}
+\begin{itemize}
+  \item World-action model: World Pilot \citep{worldpilot2026}, LaWAM \citep{lawam2026}, AHA-WAM \citep{ahawam2026}, World Action Models Enable Continual Imitation Learning \citep{regenwam2026}, OSCAR \citep{oscar2026}, Cosmos 3 \citep{cosmos3}.
+  \item Online adaptation and post-training: ROAD-VLA \citep{roadvla2026}, FORCE \citep{forcevla2026}.
+  \item Latency and execution: Action ControlNet \citep{actioncontrolnet2026}, UniFS \citep{unifs2026}.
+  \item Safety and diagnostics: LIBERO-Safety \citep{liberosafety2026}, ForesightSafety-VLA \citep{foresightsafety2026}, Foresight \citep{foresight2026}, PhysReflect-VLA \citep{physreflectvla2026}, VLA/WAM Watermark \citep{vlawatermark2026}.
+  \item Cross-domain and representation: LabVLA \citep{labvla2026}, MuseVLA \citep{musevla2026}, ACE-Ego-0 \citep{aceego2026}, LA4VLA \citep{la4vla2026}, EquiVLA \citep{equivla2026}.
+\end{itemize}
+\end{sourcebox}
+
+\begin{assignmentbox}{Reading assignment [Advanced]}
+이 장의 \cref{tab:june2026_new_trend_axes}에서 한 축을 고르고, anchor 논문 세 편을 13-question framework로 비교하라. 비교할 때는 모델 이름보다 supervision source, action interface, latency contract, safety metric, real-robot evidence를 먼저 표로 정리하라.
+\end{assignmentbox}

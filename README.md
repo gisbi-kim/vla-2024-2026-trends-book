@@ -10,6 +10,13 @@
 [![PDF 바로 다운로드](https://img.shields.io/badge/PDF-%EB%B0%94%EB%A1%9C%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-blue?style=for-the-badge&logo=adobeacrobatreader)](https://github.com/gisbi-kim/vla-2024-2026-trends-book/raw/main/book/main.pdf)
 [![Citation survey Excel](https://img.shields.io/badge/Excel-citation%20survey-217346?style=for-the-badge&logo=microsoftexcel)](https://github.com/gisbi-kim/vla-2024-2026-trends-book/blob/main/citation_survey/openvla_oft_google_scholar_citation_survey_complete.xlsx)
 
+## 최신 업데이트
+
+현재 버전은 `Draft v0.5`이며, 2026년 6월 27일 기준 arXiv 업데이트를 반영했다. v0.5에서는 World-Action Models, online/self-improving VLA, asynchronous execution, diagnostic safety, cross-domain data engines를 새 16장으로 추가하고 기존 장과의 연결점을 정리했다.
+
+- 변경 기록: [`CHANGELOG.md`](CHANGELOG.md)
+- arXiv 업데이트 스냅샷: [`summaries/arxiv_update_2026_06_27.md`](summaries/arxiv_update_2026_06_27.md)
+
 ## 저장소 제목
 
 권장 repo 이름은 `vla-2024-2026-trends-book`이다.
@@ -48,6 +55,7 @@ citation_survey/
   collection_summary_complete.json
 
 summaries/
+  arxiv_update_2026_06_27.md
   paper_summaries_13q_all_citing_papers_polished.md
   paper_summaries_13q_all_citing_papers.md
 
@@ -68,7 +76,7 @@ scripts/
 
 - `book/main.pdf`
 
-현재 버전은 `Draft v0.4`이며, 표지에는 다음과 같이 표기되어 있다.
+현재 버전은 `Draft v0.5`이며, 표지에는 다음과 같이 표기되어 있다.
 
 > Director: Giseop Kim (gsk@dgist.ac.kr)
 
